@@ -83,6 +83,17 @@ func smooth(x []float64, radius int) []float64 {
 }
 
 func onsetFrames(env []float64, sampleRate int) []int {
+	var envMax float64
+	for _, e := range env {
+		if e > envMax {
+			envMax = e
+		}
+	}
+	if envMax == 0 {
+		return nil
+	}
+	gate := gateRatio * envMax
+
 	flux := make([]float64, len(env))
 	for k := 1; k < len(env); k++ {
 		if d := env[k] - env[k-1]; d > 0 {
@@ -91,14 +102,6 @@ func onsetFrames(env []float64, sampleRate int) []int {
 	}
 	mean, std := meanStd(flux)
 	thresh := mean + fluxStdMult*std
-
-	var envMax float64
-	for _, e := range env {
-		if e > envMax {
-			envMax = e
-		}
-	}
-	gate := gateRatio * envMax
 	minGap := int(math.Ceil(minGapSec * float64(sampleRate) / envHop))
 
 	var onsets []int
