@@ -1,0 +1,8 @@
+bass2tably
+gentest
+*.exe
+*.test
+*.out
+*.wav
+*.mid
+vendor/
