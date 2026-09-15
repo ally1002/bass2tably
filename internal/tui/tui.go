@@ -12,6 +12,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"bass2tably/internal/app"
+	"bass2tably/internal/audio"
 )
 
 type screen int
@@ -25,33 +26,36 @@ const (
 type analysisDoneMsg struct{ res *app.Result }
 type analysisErrMsg struct{ err error }
 type clearErrMsg struct{}
+type tickMsg struct{ gen int }
 
 type viewerKeys struct {
-	Up     key.Binding
-	Down   key.Binding
-	Left   key.Binding
-	Right  key.Binding
-	Top    key.Binding
-	Bottom key.Binding
-	Back   key.Binding
-	Help   key.Binding
-	Quit   key.Binding
+	Up        key.Binding
+	Down      key.Binding
+	Left      key.Binding
+	Right     key.Binding
+	Top       key.Binding
+	Bottom    key.Binding
+	PlayPause key.Binding
+	Back      key.Binding
+	Help      key.Binding
+	Quit      key.Binding
 }
 
 func (k viewerKeys) ShortHelp() []key.Binding {
-	return []key.Binding{k.Help, k.Back, k.Quit}
+	return []key.Binding{k.PlayPause, k.Help, k.Back, k.Quit}
 }
 
 func (k viewerKeys) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Left, k.Right},
-		{k.Top, k.Bottom},
+		{k.Top, k.Bottom, k.PlayPause},
 		{k.Back, k.Help, k.Quit},
 	}
 }
 
 func defaultViewerKeys() viewerKeys {
 	return viewerKeys{
+		PlayPause: key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "play/pause")),
 		Up:     key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
 		Down:   key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
 		Left:   key.NewBinding(key.WithKeys("left", "h"), key.WithHelp("←/h", "left")),
@@ -71,17 +75,22 @@ var (
 )
 
 type model struct {
-	screen screen
-	picker picker
-	spin   spinner.Model
-	vp     viewport.Model
-	help   help.Model
-	keys   viewerKeys
-	opts   app.Options
-	path   string
-	res    *app.Result
-	err    error
-	w, h   int
+	screen      screen
+	picker      picker
+	spin        spinner.Model
+	vp          viewport.Model
+	help        help.Model
+	keys        viewerKeys
+	opts        app.Options
+	path        string
+	res         *app.Result
+	err         error
+	w, h        int
+	player      *audio.Player
+	audioErr    error
+	tickGen     int
+	tickRunning bool
+	curSlot     int
 }
 
 func newModel(path string, opts app.Options) model {
@@ -94,6 +103,7 @@ func newModel(path string, opts app.Options) model {
 		opts:   opts,
 		path:   path,
 	}
+	m.vp.KeyMap.PageDown.SetKeys("pgdown", "f")
 	if path != "" {
 		m.screen = analyzingScreen
 	}
@@ -131,6 +141,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "q", "ctrl+c":
+			m.closePlayer()
 			return m, tea.Quit
 		}
 	case tea.WindowSizeMsg:
@@ -192,6 +203,12 @@ func (m model) updateAnalyzing(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.vp.SetContent(msg.res.Tab)
 		m.vp.GotoTop()
 		m.vp.SetXOffset(0)
+		m.closePlayer()
+		if len(msg.res.Samples) > 0 {
+			m.player, m.audioErr = audio.New(msg.res.Samples, msg.res.SampleRate)
+		}
+		m.curSlot = 0
+		m.refreshCursor()
 		return m, nil
 	case analysisErrMsg:
 		m.err = msg.err
@@ -206,8 +223,27 @@ func (m model) updateAnalyzing(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) updateViewer(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if msg, ok := msg.(tea.KeyPressMsg); ok {
+	switch msg := msg.(type) {
+	case tickMsg:
+		if msg.gen != m.tickGen {
+			return m, nil
+		}
+		if m.player == nil || !m.player.Playing() {
+			m.tickRunning = false
+			return m, nil
+		}
+		if m.player.Done() {
+			m.player.Pause()
+			m.tickRunning = false
+			m.refreshCursor()
+			return m, nil
+		}
+		m.refreshCursor()
+		return m, tickCmd(m.tickGen)
+	case tea.KeyPressMsg:
 		switch {
+		case key.Matches(msg, m.keys.PlayPause):
+			return m.togglePlayback()
 		case key.Matches(msg, m.keys.Top):
 			m.vp.GotoTop()
 			return m, nil
@@ -218,6 +254,7 @@ func (m model) updateViewer(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.help.ShowAll = !m.help.ShowAll
 			return m, nil
 		case key.Matches(msg, m.keys.Back):
+			m.closePlayer()
 			m.screen = pickerScreen
 			m.res = nil
 			m.path = ""
@@ -227,6 +264,80 @@ func (m model) updateViewer(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.vp, cmd = m.vp.Update(msg)
 	return m, cmd
+}
+
+func (m model) togglePlayback() (tea.Model, tea.Cmd) {
+	if m.player == nil {
+		return m, nil
+	}
+	if m.player.Playing() {
+		if err := m.player.Pause(); err != nil {
+			m.audioErr = err
+		}
+		return m, nil
+	}
+	if m.player.Done() {
+		m.player.SeekSec(0)
+	}
+	if err := m.player.Play(); err != nil {
+		m.audioErr = err
+		return m, nil
+	}
+	m.refreshCursor()
+	return m, m.ensureTick()
+}
+
+func (m *model) ensureTick() tea.Cmd {
+	if m.tickRunning {
+		return nil
+	}
+	m.tickRunning = true
+	m.tickGen++
+	return tickCmd(m.tickGen)
+}
+
+func tickCmd(gen int) tea.Cmd {
+	return tea.Tick(50*time.Millisecond, func(time.Time) tea.Msg { return tickMsg{gen} })
+}
+
+func (m *model) closePlayer() {
+	if m.player != nil {
+		m.player.Close()
+		m.player = nil
+	}
+	m.audioErr = nil
+	m.tickGen++
+	m.tickRunning = false
+}
+
+func (m *model) refreshCursor() {
+	if m.res == nil || m.player == nil || len(m.res.Notes) == 0 {
+		return
+	}
+	m.curSlot = cursorSlot(m.res, m.player.PosSec())
+	block, col := m.res.Layout.SlotCell(m.curSlot)
+	m.vp.SetContent(highlightColumn(m.res.Tab, m.res.Layout, block, col, cursorStyle))
+	if m.player.Playing() {
+		m.followCursor(block, col)
+	}
+}
+
+func (m *model) followCursor(block, col int) {
+	l := m.res.Layout
+	top := block * (l.Rows + 1)
+	bottom := top + l.Rows - 1
+	switch {
+	case top < m.vp.YOffset():
+		m.vp.SetYOffset(top)
+	case bottom >= m.vp.YOffset()+m.vp.Height():
+		m.vp.SetYOffset(bottom - m.vp.Height() + 1)
+	}
+	switch {
+	case col < m.vp.XOffset():
+		m.vp.SetXOffset(col)
+	case col+l.CellW > m.vp.XOffset()+m.vp.Width():
+		m.vp.SetXOffset(col + l.CellW - m.vp.Width())
+	}
 }
 
 func (m model) View() tea.View {
@@ -266,5 +377,8 @@ func (m model) viewerView() string {
 	}
 	header := titleStyle.Render(m.res.Path) + dimStyle.Render(
 		fmt.Sprintf("  %s · 1/%d grid · %d notes", bpm, m.res.GridDiv*4, len(m.res.Notes)))
+	if m.audioErr != nil {
+		header += "\n" + errStyle.Render("playback unavailable: "+m.audioErr.Error())
+	}
 	return header + "\n" + m.vp.View() + "\n" + m.help.View(m.keys)
 }
