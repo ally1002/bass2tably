@@ -21,8 +21,33 @@ func riffNotes() []music.Note {
 	return notes
 }
 
+func TestPositions(t *testing.T) {
+	got := tab.Positions(33, beadg)
+	want := []tab.Fretting{{2, 0}, {1, 5}, {0, 10}}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("position %d: got %v, want %v", i, got[i], want[i])
+		}
+	}
+}
+
+func TestAssignPositionBias(t *testing.T) {
+	notes := []music.Note{{Midi: 28}, {Midi: 30}, {Midi: 33}, {Midi: 35}}
+	frets := tab.Assign(notes, beadg, 5)
+	want := []tab.Fretting{{0, 5}, {0, 7}, {1, 5}, {1, 7}}
+	for i, f := range frets {
+		if f != want[i] {
+			t.Errorf("note %d: got string %d fret %d, want string %d fret %d",
+				i, f.String, f.Fret, want[i].String, want[i].Fret)
+		}
+	}
+}
+
 func TestAssignTestRiff(t *testing.T) {
-	frets := tab.Assign(riffNotes(), beadg)
+	frets := tab.Assign(riffNotes(), beadg, 0)
 	want := []tab.Fretting{
 		{2, 0}, {2, 0}, {2, 3}, {3, 0}, {3, 2}, {3, 0}, {2, 0}, {1, 0}, {0, 0},
 	}
@@ -36,7 +61,7 @@ func TestAssignTestRiff(t *testing.T) {
 
 func TestRenderTestRiff(t *testing.T) {
 	notes := riffNotes()
-	out := tab.Render(notes, tab.Assign(notes, beadg), beadg, 4)
+	out := tab.Render(notes, tab.Assign(notes, beadg, 0), beadg, 4)
 	want := strings.Join([]string{
 		"G|--------------------------------|--------------------------------|",
 		"D|----------------0-------2---0---|--------------------------------|",

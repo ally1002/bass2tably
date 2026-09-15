@@ -79,7 +79,7 @@ func TestQuantizeLeadInvariance(t *testing.T) {
 			}
 		}
 		music.Quantize(notes, bpm, gridDiv)
-		frets := tab.Assign(notes, open)
+		frets := tab.Assign(notes, open, 0)
 		ascii := tab.Render(notes, frets, open, gridDiv)
 		path := filepath.Join(t.TempDir(), name+".mid")
 		if err := midiout.Write(path, notes, bpm, gridDiv); err != nil {

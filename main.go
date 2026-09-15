@@ -24,6 +24,7 @@ func main() {
 	bpm := flag.Float64("bpm", 0, "tempo of the recording in BPM (0 = estimate automatically)")
 	tuning := flag.String("tuning", "BEADG", "tuning: BEADG, EADG, DADG or BEAD")
 	grid := flag.Int("grid", 16, "quantization grid: 8 or 16")
+	position := flag.Float64("position", 0, "bias fret assignment toward this neck position")
 	out := flag.String("out", "", "MIDI output path (default: <input>.mid)")
 	flag.Usage = func() {
 		fmt.Fprintf(flag.CommandLine.Output(), "usage: bass2tably [flags] input.wav\n")
@@ -31,13 +32,13 @@ func main() {
 	}
 	flag.Parse()
 
-	if err := run(*bpm, *tuning, *grid, *out, flag.Args()); err != nil {
+	if err := run(*bpm, *tuning, *grid, *position, *out, flag.Args()); err != nil {
 		fmt.Fprintln(os.Stderr, "bass2tably:", err)
 		os.Exit(1)
 	}
 }
 
-func run(bpm float64, tuning string, grid int, out string, args []string) error {
+func run(bpm float64, tuning string, grid int, position float64, out string, args []string) error {
 	if len(args) != 1 {
 		return fmt.Errorf("expected exactly one input WAV file, got %d", len(args))
 	}
@@ -99,21 +100,40 @@ func run(bpm float64, tuning string, grid int, out string, args []string) error 
 	music.Quantize(notes, bpm, gridDiv)
 
 	open := tunings[tuning]
-	frets := tab.Assign(notes, open)
+	frets := tab.Assign(notes, open, position)
 
 	fmt.Println()
 	fmt.Print(tab.Render(notes, frets, open, gridDiv))
 	fmt.Println()
 
+	stringName := func(s int) string {
+		return strings.TrimRight(music.MidiName(open[s]), "-0123456789")
+	}
+	alts := make([]string, len(notes))
+	altW := 0
+	for i, n := range notes {
+		var parts []string
+		for _, p := range tab.Positions(n.Midi, open) {
+			if p == frets[i] {
+				continue
+			}
+			parts = append(parts, fmt.Sprintf("%s fret %d", stringName(p.String), p.Fret))
+		}
+		if len(parts) > 0 {
+			alts[i] = fmt.Sprintf("[also: %s]", strings.Join(parts, ", "))
+		}
+		if len(alts[i]) > altW {
+			altW = len(alts[i])
+		}
+	}
 	for i, n := range notes {
 		f := frets[i]
 		pos := "unplayable in this tuning"
 		if f.String >= 0 {
-			pos = fmt.Sprintf("string %s fret %d",
-				strings.TrimRight(music.MidiName(open[f.String]), "-0123456789"), f.Fret)
+			pos = fmt.Sprintf("string %s fret %d", stringName(f.String), f.Fret)
 		}
-		fmt.Printf("#%-2d  %5.2fs  %-3s  %-16s  %s\n",
-			i+1, n.StartSec, music.MidiName(n.Midi), pos, beatsLabel(n.Len, gridDiv))
+		fmt.Printf("#%-2d  %5.2fs  %-3s  %-16s  %-*s  %s\n",
+			i+1, n.StartSec, music.MidiName(n.Midi), pos, altW, alts[i], beatsLabel(n.Len, gridDiv))
 	}
 
 	if err := midiout.Write(out, notes, bpm, gridDiv); err != nil {

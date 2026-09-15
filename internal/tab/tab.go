@@ -2,6 +2,7 @@ package tab
 
 import (
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -15,24 +16,31 @@ type Fretting struct {
 	Fret   int
 }
 
-func Assign(notes []music.Note, tuning []int) []Fretting {
+func Positions(midi int, tuning []int) []Fretting {
+	var out []Fretting
+	for s, open := range tuning {
+		if f := midi - open; f >= 0 && f <= maxFret {
+			out = append(out, Fretting{String: s, Fret: f})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Fret < out[j].Fret })
+	return out
+}
+
+func Assign(notes []music.Note, tuning []int, position float64) []Fretting {
 	frets := make([]Fretting, len(notes))
 	prevFret := -1
 	for i, n := range notes {
 		best := Fretting{String: -1, Fret: -1}
 		bestCost := math.MaxFloat64
-		for s, open := range tuning {
-			fret := n.Midi - open
-			if fret < 0 || fret > maxFret {
-				continue
-			}
-			cost := 0.4 * float64(fret)
+		for _, p := range Positions(n.Midi, tuning) {
+			cost := 0.4 * math.Abs(float64(p.Fret)-position)
 			if prevFret >= 0 {
-				cost += math.Abs(float64(fret - prevFret))
+				cost += math.Abs(float64(p.Fret - prevFret))
 			}
 			if cost < bestCost {
 				bestCost = cost
-				best = Fretting{String: s, Fret: fret}
+				best = p
 			}
 		}
 		frets[i] = best
