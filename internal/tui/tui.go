@@ -36,6 +36,8 @@ type viewerKeys struct {
 	Top       key.Binding
 	Bottom    key.Binding
 	PlayPause key.Binding
+	SeekBack  key.Binding
+	SeekFwd   key.Binding
 	Back      key.Binding
 	Help      key.Binding
 	Quit      key.Binding
@@ -49,6 +51,7 @@ func (k viewerKeys) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Left, k.Right},
 		{k.Top, k.Bottom, k.PlayPause},
+		{k.SeekBack, k.SeekFwd},
 		{k.Back, k.Help, k.Quit},
 	}
 }
@@ -56,6 +59,8 @@ func (k viewerKeys) FullHelp() [][]key.Binding {
 func defaultViewerKeys() viewerKeys {
 	return viewerKeys{
 		PlayPause: key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "play/pause")),
+		SeekBack:  key.NewBinding(key.WithKeys("shift+left", ","), key.WithHelp("shift+←/,", "seek -1 measure")),
+		SeekFwd:   key.NewBinding(key.WithKeys("shift+right", "."), key.WithHelp("shift+→/.", "seek +1 measure")),
 		Up:     key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
 		Down:   key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
 		Left:   key.NewBinding(key.WithKeys("left", "h"), key.WithHelp("←/h", "left")),
@@ -244,6 +249,12 @@ func (m model) updateViewer(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case key.Matches(msg, m.keys.PlayPause):
 			return m.togglePlayback()
+		case key.Matches(msg, m.keys.SeekBack):
+			m.seekMeasures(-1)
+			return m, nil
+		case key.Matches(msg, m.keys.SeekFwd):
+			m.seekMeasures(+1)
+			return m, nil
 		case key.Matches(msg, m.keys.Top):
 			m.vp.GotoTop()
 			return m, nil
@@ -285,6 +296,19 @@ func (m model) togglePlayback() (tea.Model, tea.Cmd) {
 	}
 	m.refreshCursor()
 	return m, m.ensureTick()
+}
+
+func (m *model) seekMeasures(delta float64) {
+	if m.player == nil || m.res == nil {
+		return
+	}
+	measureSec := 240.0 / m.res.BPM
+	m.player.SeekSec(m.player.PosSec() + delta*measureSec)
+	m.refreshCursor()
+	if !m.player.Playing() {
+		block, col := m.res.Layout.SlotCell(m.curSlot)
+		m.followCursor(block, col)
+	}
 }
 
 func (m *model) ensureTick() tea.Cmd {

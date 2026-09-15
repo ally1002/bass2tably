@@ -113,6 +113,54 @@ func TestTickWithoutPlayerStops(t *testing.T) {
 	}
 }
 
+func TestSeekClampsAndPausedSeekMovesCursorOnly(t *testing.T) {
+	s, l, notes, frets := renderFixture(t)
+	res := &app.Result{
+		Path:       "x.wav",
+		SampleRate: 44100,
+		Samples:    make([]float64, 44100),
+		BPM:        100,
+		GridDiv:    4,
+		Notes:      notes,
+		Frets:      frets,
+		Tab:        s,
+		Layout:     l,
+	}
+	m := newModel("x.wav", testOpts)
+	m, _ = advance(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+	m, _ = advance(t, m, analysisDoneMsg{res})
+	if m.player == nil {
+		t.Skipf("no audio device available: %v", m.audioErr)
+	}
+	defer m.closePlayer()
+
+	m, cmd := advance(t, m, keyPress('.'))
+	if cmd != nil {
+		t.Error("seek produced a command")
+	}
+	if pos := m.player.PosSec(); pos != 1.0 {
+		t.Errorf("PosSec after +1 measure on a 1 s clip = %.4f, want clamped to 1.0", pos)
+	}
+	if m.player.Playing() {
+		t.Error("seek while paused must not start playback")
+	}
+	if m.curSlot == 0 {
+		t.Error("cursor did not move on seek")
+	}
+
+	m, _ = advance(t, m, keyPress(','))
+	m, _ = advance(t, m, keyPress(','))
+	if pos := m.player.PosSec(); pos != 0 {
+		t.Errorf("PosSec after seeking past the start = %.4f, want clamped to 0", pos)
+	}
+	if m.curSlot != 0 {
+		t.Errorf("curSlot = %d after seeking to start, want 0", m.curSlot)
+	}
+	if m.player.Playing() {
+		t.Error("seek while paused must not start playback")
+	}
+}
+
 func TestSpaceWithoutPlayerIsIgnored(t *testing.T) {
 	m := newModel("x.wav", testOpts)
 	m, _ = advance(t, m, analysisDoneMsg{&app.Result{Tab: "G|---|\n"}})
