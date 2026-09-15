@@ -6,6 +6,7 @@ require (
 	charm.land/bubbles/v2 v2.2.1
 	charm.land/bubbletea/v2 v2.0.9
 	charm.land/lipgloss/v2 v2.0.6
+	github.com/gen2brain/malgo v0.11.26
 	github.com/go-audio/audio v1.0.0
 	github.com/go-audio/wav v1.1.0
 	gitlab.com/gomidi/midi/v2 v2.3.24
