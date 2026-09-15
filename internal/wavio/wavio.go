@@ -2,7 +2,11 @@ package wavio
 
 import (
 	"fmt"
+	"math"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 
 	"github.com/go-audio/wav"
 )
@@ -31,17 +35,37 @@ func Load(path string) (*Clip, error) {
 	if ch < 1 {
 		return nil, fmt.Errorf("%s: invalid channel count %d", path, ch)
 	}
+	isFloat := d.WavAudioFormat == 3
 	scale := float64(int(1) << (int(d.BitDepth) - 1))
 	n := len(buf.Data) / ch
 	samples := make([]float64, n)
 	for i := range samples {
 		var s float64
 		for c := 0; c < ch; c++ {
-			s += float64(buf.Data[i*ch+c])
+			v := buf.Data[i*ch+c]
+			if isFloat {
+				s += float64(math.Float32frombits(uint32(int32(v))))
+			} else {
+				s += float64(v) / scale
+			}
 		}
-		samples[i] = s / float64(ch) / scale
+		samples[i] = s / float64(ch)
 	}
 	return &Clip{Samples: samples, SampleRate: buf.Format.SampleRate}, nil
+}
+
+func LoadAny(path string) (*Clip, error) {
+	if strings.EqualFold(filepath.Ext(path), ".wav") {
+		return Load(path)
+	}
+	tmp := filepath.Join(os.TempDir(), fmt.Sprintf("bass2tably-%d.wav", os.Getpid()))
+	defer os.Remove(tmp)
+	cmd := exec.Command("ffmpeg", "-y", "-loglevel", "error",
+		"-i", path, "-ac", "1", "-ar", "44100", "-c:a", "pcm_s16le", tmp)
+	if outb, err := cmd.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("ffmpeg decode failed: %v: %s", err, outb)
+	}
+	return Load(tmp)
 }
 
 func (c *Clip) Duration() float64 {

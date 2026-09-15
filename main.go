@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"bass2tably/internal/dsp"
@@ -51,10 +52,10 @@ func run(bpm float64, tuning string, grid int, position float64, out string, arg
 
 	input := args[0]
 	if out == "" {
-		out = strings.TrimSuffix(input, ".wav") + ".mid"
+		out = strings.TrimSuffix(input, filepath.Ext(input)) + ".mid"
 	}
 
-	clip, err := wavio.Load(input)
+	clip, err := wavio.LoadAny(input)
 	if err != nil {
 		return err
 	}
