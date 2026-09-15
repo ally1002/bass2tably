@@ -21,7 +21,7 @@ var tunings = map[string][]int{
 }
 
 func main() {
-	bpm := flag.Float64("bpm", 0, "tempo of the recording in BPM (required)")
+	bpm := flag.Float64("bpm", 0, "tempo of the recording in BPM (0 = estimate automatically)")
 	tuning := flag.String("tuning", "BEADG", "tuning: BEADG, EADG, DADG or BEAD")
 	grid := flag.Int("grid", 16, "quantization grid: 8 or 16")
 	out := flag.String("out", "", "MIDI output path (default: <input>.mid)")
@@ -40,9 +40,6 @@ func main() {
 func run(bpm float64, tuning string, grid int, out string, args []string) error {
 	if len(args) != 1 {
 		return fmt.Errorf("expected exactly one input WAV file, got %d", len(args))
-	}
-	if bpm <= 0 {
-		return fmt.Errorf("--bpm is required and must be > 0")
 	}
 	if _, ok := tunings[tuning]; !ok {
 		return fmt.Errorf("unknown tuning %q (valid: BEADG, EADG, DADG, BEAD)", tuning)
@@ -68,6 +65,19 @@ func run(bpm float64, tuning string, grid int, out string, args []string) error 
 
 	segs := dsp.Segments(clip.Samples, clip.SampleRate)
 	fmt.Printf("notes:       %d\n", len(segs))
+
+	if bpm <= 0 {
+		onsets := make([]float64, len(segs))
+		for i, s := range segs {
+			onsets[i] = float64(s.Start) / float64(clip.SampleRate)
+		}
+		est, ok := music.EstimateBPM(onsets)
+		if !ok {
+			return fmt.Errorf("could not estimate tempo (too few notes); pass --bpm")
+		}
+		bpm = est
+		fmt.Printf("\nestimated tempo: %.1f BPM   (override with --bpm if wrong)\n", bpm)
+	}
 
 	notes := make([]music.Note, 0, len(segs))
 	for i, s := range segs {
