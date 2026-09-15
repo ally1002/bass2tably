@@ -4,13 +4,13 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"bass2tably/internal/app"
 	"bass2tably/internal/midiout"
 	"bass2tably/internal/music"
 	"bass2tably/internal/tab"
+	"bass2tably/internal/tui"
 )
 
 func main() {
@@ -18,17 +18,40 @@ func main() {
 	tuning := flag.String("tuning", "BEADG", "tuning: BEADG, EADG, DADG or BEAD")
 	grid := flag.Int("grid", 16, "quantization grid: 8 or 16")
 	position := flag.Float64("position", 0, "bias fret assignment toward this neck position")
-	out := flag.String("out", "", "MIDI output path (default: <input>.mid)")
+	out := flag.String("out", "", "write a MIDI file to this path (omit to skip MIDI output)")
+	tuiFlag := flag.Bool("tui", false, "open the TUI viewer for the given file")
 	flag.Usage = func() {
-		fmt.Fprintf(flag.CommandLine.Output(), "usage: bass2tably [flags] input.wav\n")
+		fmt.Fprintf(flag.CommandLine.Output(), "usage: bass2tably [flags] [input.wav]\n")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
 
-	if err := run(*bpm, *tuning, *grid, *position, *out, flag.Args()); err != nil {
+	var err error
+	if *tuiFlag || flag.NArg() == 0 {
+		err = runTUI(*bpm, *tuning, *grid, *position, flag.Args())
+	} else {
+		err = run(*bpm, *tuning, *grid, *position, *out, flag.Args())
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "bass2tably:", err)
 		os.Exit(1)
 	}
+}
+
+func runTUI(bpm float64, tuning string, grid int, position float64, args []string) error {
+	if len(args) > 1 {
+		return fmt.Errorf("expected at most one input file, got %d", len(args))
+	}
+	path := ""
+	if len(args) == 1 {
+		path = args[0]
+	}
+	return tui.Run(path, app.Options{
+		BPM:      bpm,
+		Tuning:   tuning,
+		Grid:     grid,
+		Position: position,
+	})
 }
 
 func run(bpm float64, tuning string, grid int, position float64, out string, args []string) error {
@@ -37,9 +60,6 @@ func run(bpm float64, tuning string, grid int, position float64, out string, arg
 	}
 
 	input := args[0]
-	if out == "" {
-		out = strings.TrimSuffix(input, filepath.Ext(input)) + ".mid"
-	}
 
 	res, err := app.Analyze(input, app.Options{
 		BPM:      bpm,
@@ -53,10 +73,12 @@ func run(bpm float64, tuning string, grid int, position float64, out string, arg
 
 	printResult(res)
 
-	if err := midiout.Write(out, res.Notes, res.BPM, res.GridDiv); err != nil {
-		return err
+	if out != "" {
+		if err := midiout.Write(out, res.Notes, res.BPM, res.GridDiv); err != nil {
+			return err
+		}
+		fmt.Printf("\nwrote %s\n", out)
 	}
-	fmt.Printf("\nwrote %s\n", out)
 	return nil
 }
 

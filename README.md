@@ -1,6 +1,6 @@
 # bass2tably
 
-Turns a WAV recording of a bass riff into an ASCII bass tab in the terminal plus a Standard MIDI File, so riffs never get forgotten again.
+Turns a WAV recording of a bass riff into an ASCII bass tab in the terminal (optionally a Standard MIDI File too), so riffs never get forgotten again.
 
 Pure Go, pure DSP (YIN pitch detection + energy-based onset detection), no machine learning, no cgo.
 
@@ -15,9 +15,9 @@ bass2tably --bpm 90 --tuning BEADG --out riff.mid riff.wav
 | `--bpm` | (required) | tempo of the recording in BPM |
 | `--tuning` | `BEADG` | `BEADG`, `EADG`, `DADG` or `BEAD` |
 | `--grid` | `16` | quantization grid: finest note value is an eighth (8) or sixteenth (16) |
-| `--out` | `<input>.mid` | MIDI output path |
+| `--out` | (none) | write a MIDI file to this path; no MIDI is written if omitted |
 
-Output: an ASCII tab (16 slots per measure, 4 measures per line), a per-note list (`#1  0.02s  A1  string A fret 0  1/2 beat`), and the `.mid` file (960 TPQN, GM Electric Bass finger).
+Output: an ASCII tab (16 slots per measure, 4 measures per line) and a per-note list (`#1  0.02s  A1  string A fret 0  1/2 beat`). With `--out`, also a `.mid` file (960 TPQN, GM Electric Bass finger).
 
 ## Recording guidelines
 
