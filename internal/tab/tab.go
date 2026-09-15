@@ -29,26 +29,87 @@ func Positions(midi int, tuning []int) []Fretting {
 
 func Assign(notes []music.Note, tuning []int, position float64) []Fretting {
 	frets := make([]Fretting, len(notes))
-	prevFret := -1
+	for i := range frets {
+		frets[i] = Fretting{String: -1, Fret: -1}
+	}
+	var idx []int
+	var cands [][]Fretting
 	for i, n := range notes {
-		best := Fretting{String: -1, Fret: -1}
-		bestCost := math.MaxFloat64
-		for _, p := range Positions(n.Midi, tuning) {
-			cost := 0.4 * math.Abs(float64(p.Fret)-position)
-			if prevFret >= 0 {
-				cost += math.Abs(float64(p.Fret - prevFret))
-			}
-			if cost < bestCost {
-				bestCost = cost
-				best = p
-			}
-		}
-		frets[i] = best
-		if best.String >= 0 {
-			prevFret = best.Fret
+		if ps := Positions(n.Midi, tuning); len(ps) > 0 {
+			idx = append(idx, i)
+			cands = append(cands, ps)
 		}
 	}
+	if len(idx) == 0 {
+		return frets
+	}
+	choice := dpAssign(cands, position)
+	for k, i := range idx {
+		frets[i] = cands[k][choice[k]]
+	}
 	return frets
+}
+
+func placeCost(p Fretting, position float64) float64 {
+	return 0.4 * math.Abs(float64(p.Fret)-position)
+}
+
+type pathCost struct {
+	move float64
+	hops float64
+}
+
+func (a pathCost) less(b pathCost) bool {
+	if math.Abs(a.move-b.move) > 1e-9 {
+		return a.move < b.move
+	}
+	return a.hops < b.hops
+}
+
+func (a pathCost) plus(from, to Fretting) pathCost {
+	return pathCost{
+		move: a.move + math.Abs(float64(to.Fret-from.Fret)),
+		hops: a.hops + math.Abs(float64(to.String-from.String)),
+	}
+}
+
+func dpAssign(cands [][]Fretting, position float64) []int {
+	n := len(cands)
+	cost := make([][]pathCost, n)
+	par := make([][]int, n)
+	for k := range cands {
+		cost[k] = make([]pathCost, len(cands[k]))
+		par[k] = make([]int, len(cands[k]))
+	}
+	for ci, p := range cands[0] {
+		cost[0][ci] = pathCost{move: placeCost(p, position)}
+	}
+	for k := 1; k < n; k++ {
+		for ci, p := range cands[k] {
+			best := pathCost{move: math.Inf(1)}
+			for cj, q := range cands[k-1] {
+				if c := cost[k-1][cj].plus(q, p); c.less(best) {
+					best = c
+					par[k][ci] = cj
+				}
+			}
+			best.move += placeCost(p, position)
+			cost[k][ci] = best
+		}
+	}
+
+	bestCi := 0
+	for ci := 1; ci < len(cands[n-1]); ci++ {
+		if cost[n-1][ci].less(cost[n-1][bestCi]) {
+			bestCi = ci
+		}
+	}
+	choice := make([]int, n)
+	choice[n-1] = bestCi
+	for k := n - 1; k > 0; k-- {
+		choice[k-1] = par[k][choice[k]]
+	}
+	return choice
 }
 
 func Render(notes []music.Note, frets []Fretting, tuning []int, gridDiv int) string {
