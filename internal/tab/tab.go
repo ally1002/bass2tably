@@ -112,7 +112,30 @@ func dpAssign(cands [][]Fretting, position float64) []int {
 	return choice
 }
 
+type Layout struct {
+	NameW, CellW    int
+	SlotsPerMeasure int
+	MeasuresPerLine int
+	Measures        int
+	Rows            int
+}
+
+// Block = index of the 5-row line group; Col = byte column inside each row.
+func (l Layout) SlotCell(slot int) (block, col int) {
+	m := slot / l.SlotsPerMeasure
+	block = m / l.MeasuresPerLine
+	mInLine := m % l.MeasuresPerLine
+	col = l.NameW + 1 + mInLine*(l.SlotsPerMeasure*l.CellW+1) +
+		(slot%l.SlotsPerMeasure)*l.CellW
+	return
+}
+
 func Render(notes []music.Note, frets []Fretting, tuning []int, gridDiv int) string {
+	s, _ := RenderLayout(notes, frets, tuning, gridDiv)
+	return s
+}
+
+func RenderLayout(notes []music.Note, frets []Fretting, tuning []int, gridDiv int) (string, Layout) {
 	slotsPerMeasure := gridDiv * 4
 	const measuresPerLine = 4
 
@@ -183,5 +206,12 @@ func Render(notes []music.Note, frets []Fretting, tuning []int, gridDiv int) str
 			b.WriteString("\n")
 		}
 	}
-	return b.String()
+	return b.String(), Layout{
+		NameW:           nameW,
+		CellW:           cellW,
+		SlotsPerMeasure: slotsPerMeasure,
+		MeasuresPerLine: measuresPerLine,
+		Measures:        measures,
+		Rows:            len(tuning),
+	}
 }

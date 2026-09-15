@@ -7,19 +7,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"bass2tably/internal/dsp"
+	"bass2tably/internal/app"
 	"bass2tably/internal/midiout"
 	"bass2tably/internal/music"
 	"bass2tably/internal/tab"
-	"bass2tably/internal/wavio"
 )
-
-var tunings = map[string][]int{
-	"BEADG": {23, 28, 33, 38, 43},
-	"EADG":  {28, 33, 38, 43},
-	"DADG":  {26, 33, 38, 43},
-	"BEAD":  {23, 28, 33, 38},
-}
 
 func main() {
 	bpm := flag.Float64("bpm", 0, "tempo of the recording in BPM (0 = estimate automatically)")
@@ -43,79 +35,59 @@ func run(bpm float64, tuning string, grid int, position float64, out string, arg
 	if len(args) != 1 {
 		return fmt.Errorf("expected exactly one input WAV file, got %d", len(args))
 	}
-	if _, ok := tunings[tuning]; !ok {
-		return fmt.Errorf("unknown tuning %q (valid: BEADG, EADG, DADG, BEAD)", tuning)
-	}
-	if grid != 8 && grid != 16 {
-		return fmt.Errorf("--grid must be 8 or 16, got %d", grid)
-	}
 
 	input := args[0]
 	if out == "" {
 		out = strings.TrimSuffix(input, filepath.Ext(input)) + ".mid"
 	}
 
-	clip, err := wavio.LoadAny(input)
+	res, err := app.Analyze(input, app.Options{
+		BPM:      bpm,
+		Tuning:   tuning,
+		Grid:     grid,
+		Position: position,
+	})
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("input:       %s\n", input)
-	fmt.Printf("sample rate: %d Hz\n", clip.SampleRate)
-	fmt.Printf("duration:    %.3f s\n", clip.Duration())
-	fmt.Printf("peak:        %.3f\n", clip.Peak())
+	printResult(res)
 
-	segs := dsp.Segments(clip.Samples, clip.SampleRate)
-	fmt.Printf("notes:       %d\n", len(segs))
+	if err := midiout.Write(out, res.Notes, res.BPM, res.GridDiv); err != nil {
+		return err
+	}
+	fmt.Printf("\nwrote %s\n", out)
+	return nil
+}
 
-	if bpm <= 0 {
-		onsets := make([]float64, len(segs))
-		for i, s := range segs {
-			onsets[i] = float64(s.Start) / float64(clip.SampleRate)
-		}
-		est, ok := music.EstimateBPM(onsets)
-		if !ok {
-			return fmt.Errorf("could not estimate tempo (too few notes); pass --bpm")
-		}
-		bpm = est
-		fmt.Printf("\nestimated tempo: %.1f BPM   (override with --bpm if wrong)\n", bpm)
+func printResult(res *app.Result) {
+	fmt.Printf("input:       %s\n", res.Path)
+	fmt.Printf("sample rate: %d Hz\n", res.SampleRate)
+	fmt.Printf("duration:    %.3f s\n", res.DurationSec)
+	fmt.Printf("peak:        %.3f\n", res.Peak)
+	fmt.Printf("notes:       %d\n", len(res.Notes)+len(res.Skipped))
+
+	if res.BPMEstimated {
+		fmt.Printf("\nestimated tempo: %.1f BPM   (override with --bpm if wrong)\n", res.BPM)
 	}
 
-	notes := make([]music.Note, 0, len(segs))
-	for i, s := range segs {
-		start := float64(s.Start) / float64(clip.SampleRate)
-		dur := float64(s.End-s.Start) / float64(clip.SampleRate)
-		freq, ok := dsp.NotePitch(clip.Samples, clip.SampleRate, s)
-		if !ok {
-			fmt.Printf("  #%-2d  %.3fs  dur %.3fs  (no pitch, skipped)\n", i+1, start, dur)
-			continue
-		}
-		notes = append(notes, music.Note{
-			Midi:     music.MidiFromFreq(freq),
-			StartSec: start,
-			DurSec:   dur,
-		})
+	for _, s := range res.Skipped {
+		fmt.Printf("  #%-2d  %.3fs  dur %.3fs  (no pitch, skipped)\n", s.Index+1, s.StartSec, s.DurSec)
 	}
-
-	gridDiv := grid / 4
-	music.Quantize(notes, bpm, gridDiv)
-
-	open := tunings[tuning]
-	frets := tab.Assign(notes, open, position)
 
 	fmt.Println()
-	fmt.Print(tab.Render(notes, frets, open, gridDiv))
+	fmt.Print(res.Tab)
 	fmt.Println()
 
 	stringName := func(s int) string {
-		return strings.TrimRight(music.MidiName(open[s]), "-0123456789")
+		return strings.TrimRight(music.MidiName(res.Tuning[s]), "-0123456789")
 	}
-	alts := make([]string, len(notes))
+	alts := make([]string, len(res.Notes))
 	altW := 0
-	for i, n := range notes {
+	for i, n := range res.Notes {
 		var parts []string
-		for _, p := range tab.Positions(n.Midi, open) {
-			if p == frets[i] {
+		for _, p := range tab.Positions(n.Midi, res.Tuning) {
+			if p == res.Frets[i] {
 				continue
 			}
 			parts = append(parts, fmt.Sprintf("%s fret %d", stringName(p.String), p.Fret))
@@ -127,21 +99,15 @@ func run(bpm float64, tuning string, grid int, position float64, out string, arg
 			altW = len(alts[i])
 		}
 	}
-	for i, n := range notes {
-		f := frets[i]
+	for i, n := range res.Notes {
+		f := res.Frets[i]
 		pos := "unplayable in this tuning"
 		if f.String >= 0 {
 			pos = fmt.Sprintf("string %s fret %d", stringName(f.String), f.Fret)
 		}
 		fmt.Printf("#%-2d  %5.2fs  %-3s  %-16s  %-*s  %s\n",
-			i+1, n.StartSec, music.MidiName(n.Midi), pos, altW, alts[i], beatsLabel(n.Len, gridDiv))
+			i+1, n.StartSec, music.MidiName(n.Midi), pos, altW, alts[i], beatsLabel(n.Len, res.GridDiv))
 	}
-
-	if err := midiout.Write(out, notes, bpm, gridDiv); err != nil {
-		return err
-	}
-	fmt.Printf("\nwrote %s\n", out)
-	return nil
 }
 
 func beatsLabel(slots, gridDiv int) string {
