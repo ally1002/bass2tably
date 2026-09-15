@@ -15,17 +15,18 @@ import (
 func main() {
 	bpm := flag.Float64("bpm", 100, "tempo of the generated riff in BPM")
 	sr := flag.Int("sr", 44100, "sample rate")
+	lead := flag.Float64("lead", 0, "seconds of silence before the riff")
 	out := flag.String("out", "testriff.wav", "output WAV path")
 	flag.Parse()
 
-	if err := run(*bpm, *sr, *out); err != nil {
+	if err := run(*bpm, *sr, *lead, *out); err != nil {
 		fmt.Fprintln(os.Stderr, "gentest:", err)
 		os.Exit(1)
 	}
 }
 
-func run(bpm float64, sr int, out string) error {
-	samples := synth.Render(synth.TestRiff, bpm, sr)
+func run(bpm float64, sr int, lead float64, out string) error {
+	samples := synth.RenderLead(synth.TestRiff, bpm, sr, lead)
 	if err := writeWav(out, samples, sr); err != nil {
 		return err
 	}
@@ -34,7 +35,7 @@ func run(bpm float64, sr int, out string) error {
 		beats += e.Beats
 	}
 	fmt.Printf("wrote %s: %d notes, %.3f s at %g BPM, %d Hz\n",
-		out, len(synth.TestRiff), beats*60/bpm, bpm, sr)
+		out, len(synth.TestRiff), lead+beats*60/bpm, bpm, sr)
 	return nil
 }
 

@@ -11,9 +11,13 @@ type Note struct {
 }
 
 func Quantize(notes []Note, bpm float64, gridDiv int) {
+	if len(notes) == 0 {
+		return
+	}
 	slotSec := 60.0 / bpm / float64(gridDiv)
+	t0 := notes[0].StartSec
 	for i := range notes {
-		notes[i].Slot = int(math.Round(notes[i].StartSec / slotSec))
+		notes[i].Slot = int(math.Round((notes[i].StartSec - t0) / slotSec))
 		l := int(math.Round(notes[i].DurSec / slotSec))
 		if l < 1 {
 			l = 1

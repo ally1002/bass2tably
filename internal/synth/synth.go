@@ -12,6 +12,11 @@ var TestRiff = []Event{
 	{40, 0.5}, {38, 0.5}, {33, 1}, {28, 1}, {23, 1},
 }
 
+func RenderLead(events []Event, bpm float64, sr int, leadSec float64) []float64 {
+	lead := make([]float64, int(leadSec*float64(sr)))
+	return append(lead, Render(events, bpm, sr)...)
+}
+
 func Render(events []Event, bpm float64, sr int) []float64 {
 	var beats float64
 	for _, e := range events {

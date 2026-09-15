@@ -1,11 +1,16 @@
 package music_test
 
 import (
+	"bytes"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"bass2tably/internal/dsp"
+	"bass2tably/internal/midiout"
 	"bass2tably/internal/music"
 	"bass2tably/internal/synth"
+	"bass2tably/internal/tab"
 )
 
 func TestQuantizeTestRiff(t *testing.T) {
@@ -47,6 +52,54 @@ func TestQuantizeTestRiff(t *testing.T) {
 		if notes[i].Slot+notes[i].Len > notes[i+1].Slot {
 			t.Errorf("note %d overlaps note %d", i, i+1)
 		}
+	}
+}
+
+func TestQuantizeLeadInvariance(t *testing.T) {
+	const bpm = 100.0
+	const sr = 44100
+	const gridDiv = 4
+	open := []int{23, 28, 33, 38, 43}
+
+	pipeline := func(name string, samples []float64) (string, []byte) {
+		segs := dsp.Segments(samples, sr)
+		if len(segs) != len(synth.TestRiff) {
+			t.Fatalf("%s: got %d segments, want %d", name, len(segs), len(synth.TestRiff))
+		}
+		notes := make([]music.Note, len(segs))
+		for i, seg := range segs {
+			freq, ok := dsp.NotePitch(samples, sr, seg)
+			if !ok {
+				t.Fatalf("%s: note %d: no pitch detected", name, i)
+			}
+			notes[i] = music.Note{
+				Midi:     music.MidiFromFreq(freq),
+				StartSec: float64(seg.Start) / sr,
+				DurSec:   float64(seg.End-seg.Start) / sr,
+			}
+		}
+		music.Quantize(notes, bpm, gridDiv)
+		frets := tab.Assign(notes, open)
+		ascii := tab.Render(notes, frets, open, gridDiv)
+		path := filepath.Join(t.TempDir(), name+".mid")
+		if err := midiout.Write(path, notes, bpm, gridDiv); err != nil {
+			t.Fatalf("%s: midi write: %v", name, err)
+		}
+		mid, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("%s: midi read: %v", name, err)
+		}
+		return ascii, mid
+	}
+
+	baseTab, baseMid := pipeline("base", synth.Render(synth.TestRiff, bpm, sr))
+	leadTab, leadMid := pipeline("lead", synth.RenderLead(synth.TestRiff, bpm, sr, 1.37))
+
+	if leadTab != baseTab {
+		t.Errorf("tab differs with 1.37s lead:\nbase:\n%s\nlead:\n%s", baseTab, leadTab)
+	}
+	if !bytes.Equal(leadMid, baseMid) {
+		t.Errorf("MIDI differs with 1.37s lead: %d vs %d bytes", len(baseMid), len(leadMid))
 	}
 }
 
