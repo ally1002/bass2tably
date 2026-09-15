@@ -4,5 +4,6 @@ gentest
 *.test
 *.out
 *.wav
+!testdata/*.wav
 *.mid
 vendor/
