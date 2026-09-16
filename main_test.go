@@ -27,12 +27,17 @@ func TestRealRecordings(t *testing.T) {
 				t.Fatal(err)
 			}
 			var want []int
-			for _, f := range strings.Fields(string(data)) {
-				v, err := strconv.Atoi(f)
-				if err != nil {
-					t.Fatalf("bad .expected line %q: %v", f, err)
+			for _, line := range strings.Split(string(data), "\n") {
+				if i := strings.IndexByte(line, '#'); i >= 0 {
+					line = line[:i]
 				}
-				want = append(want, v)
+				for _, f := range strings.Fields(line) {
+					v, err := strconv.Atoi(f)
+					if err != nil {
+						t.Fatalf("bad .expected value %q: %v", f, err)
+					}
+					want = append(want, v)
+				}
 			}
 
 			clip, err := wavio.LoadAny(wavPath)
