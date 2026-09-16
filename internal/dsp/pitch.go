@@ -7,7 +7,7 @@ const (
 	yinHop        = 1024
 	yinFmin       = 28.0
 	yinFmax       = 450.0
-	yinThreshold  = 0.25
+	yinThreshold  = 0.35
 	attackSkipSec = 0.010
 )
 
