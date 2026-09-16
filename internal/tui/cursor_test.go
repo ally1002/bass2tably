@@ -116,15 +116,17 @@ func TestTickWithoutPlayerStops(t *testing.T) {
 func TestSeekClampsAndPausedSeekMovesCursorOnly(t *testing.T) {
 	s, l, notes, frets := renderFixture(t)
 	res := &app.Result{
-		Path:       "x.wav",
-		SampleRate: 44100,
-		Samples:    make([]float64, 44100),
-		BPM:        100,
-		GridDiv:    4,
-		Notes:      notes,
-		Frets:      frets,
-		Tab:        s,
-		Layout:     l,
+		Path:        "x.wav",
+		SampleRate:  44100,
+		DurationSec: 1.0,
+		Tuning:      []int{23, 28, 33, 38, 43},
+		Samples:     make([]float64, 44100),
+		BPM:         100,
+		GridDiv:     4,
+		Notes:       notes,
+		Frets:       frets,
+		Tab:         s,
+		Layout:      l,
 	}
 	m := newModel("x.wav", testOpts)
 	m, _ = advance(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})

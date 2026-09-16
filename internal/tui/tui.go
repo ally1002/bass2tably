@@ -36,40 +36,44 @@ type viewerKeys struct {
 	Top       key.Binding
 	Bottom    key.Binding
 	PlayPause key.Binding
+	PlayFrom  key.Binding
 	SeekBack  key.Binding
 	SeekFwd   key.Binding
+	Notes     key.Binding
 	Back      key.Binding
 	Help      key.Binding
 	Quit      key.Binding
 }
 
 func (k viewerKeys) ShortHelp() []key.Binding {
-	return []key.Binding{k.PlayPause, k.Help, k.Back, k.Quit}
+	return []key.Binding{k.PlayPause, k.Notes, k.Help, k.Back, k.Quit}
 }
 
 func (k viewerKeys) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Left, k.Right},
 		{k.Top, k.Bottom, k.PlayPause},
-		{k.SeekBack, k.SeekFwd},
-		{k.Back, k.Help, k.Quit},
+		{k.SeekBack, k.SeekFwd, k.PlayFrom},
+		{k.Notes, k.Back, k.Help, k.Quit},
 	}
 }
 
 func defaultViewerKeys() viewerKeys {
 	return viewerKeys{
 		PlayPause: key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "play/pause")),
+		PlayFrom:  key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "play from note")),
 		SeekBack:  key.NewBinding(key.WithKeys("shift+left", ","), key.WithHelp("shift+←/,", "seek -1 measure")),
 		SeekFwd:   key.NewBinding(key.WithKeys("shift+right", "."), key.WithHelp("shift+→/.", "seek +1 measure")),
-		Up:     key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
-		Down:   key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
-		Left:   key.NewBinding(key.WithKeys("left", "h"), key.WithHelp("←/h", "left")),
-		Right:  key.NewBinding(key.WithKeys("right", "l"), key.WithHelp("→/l", "right")),
-		Top:    key.NewBinding(key.WithKeys("g", "home"), key.WithHelp("g", "top")),
-		Bottom: key.NewBinding(key.WithKeys("G", "end"), key.WithHelp("G", "bottom")),
-		Back:   key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back to picker")),
-		Help:   key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
-		Quit:   key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
+		Notes:     key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "note list")),
+		Up:        key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
+		Down:      key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
+		Left:      key.NewBinding(key.WithKeys("left", "h"), key.WithHelp("←/h", "left")),
+		Right:     key.NewBinding(key.WithKeys("right", "l"), key.WithHelp("→/l", "right")),
+		Top:       key.NewBinding(key.WithKeys("g", "home"), key.WithHelp("g", "top")),
+		Bottom:    key.NewBinding(key.WithKeys("G", "end"), key.WithHelp("G", "bottom")),
+		Back:      key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back to picker")),
+		Help:      key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
+		Quit:      key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
 	}
 }
 
@@ -85,6 +89,7 @@ type model struct {
 	spin        spinner.Model
 	vp          viewport.Model
 	help        help.Model
+	notes       notePanel
 	keys        viewerKeys
 	opts        app.Options
 	path        string
@@ -96,6 +101,7 @@ type model struct {
 	tickGen     int
 	tickRunning bool
 	curSlot     int
+	curPos      float64
 }
 
 func newModel(path string, opts app.Options) model {
@@ -163,6 +169,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 }
 
+const (
+	pickerChromeLines = 5
+	viewerChromeLines = 3
+)
+
 func (m *model) resizeViewer() {
 	w, h := m.w, m.h-viewerChromeLines
 	if w < 1 {
@@ -171,15 +182,27 @@ func (m *model) resizeViewer() {
 	if h < 1 {
 		h = 1
 	}
+	if m.notes.open {
+		ph := h / 3
+		if ph > 12 {
+			ph = 12
+		}
+		if ph > h-4 {
+			ph = h - 4
+		}
+		if ph < 1 {
+			ph = 1
+		}
+		m.notes.setHeight(ph)
+		if h -= ph + 1; h < 1 {
+			h = 1
+		}
+	}
 	m.vp.SetWidth(w)
 	m.vp.SetHeight(h)
 	m.help.SetWidth(w)
 	m.picker.setHeight(m.h - pickerChromeLines)
 }
-
-const pickerChromeLines = 5
-
-const viewerChromeLines = 3
 
 func (m model) updatePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -204,6 +227,7 @@ func (m model) updateAnalyzing(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case analysisDoneMsg:
 		m.res = msg.res
 		m.screen = viewerScreen
+		m.notes.setLines(msg.res.NoteLines())
 		m.resizeViewer()
 		m.vp.SetContent(msg.res.Tab)
 		m.vp.GotoTop()
@@ -213,6 +237,7 @@ func (m model) updateAnalyzing(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.player, m.audioErr = audio.New(msg.res.Samples, msg.res.SampleRate)
 		}
 		m.curSlot = 0
+		m.curPos = 0
 		m.refreshCursor()
 		return m, nil
 	case analysisErrMsg:
@@ -237,9 +262,11 @@ func (m model) updateViewer(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.tickRunning = false
 			return m, nil
 		}
+		m.curPos = m.player.PosSec()
 		if m.player.Done() {
 			m.player.Pause()
 			m.tickRunning = false
+			m.syncNoteSel()
 			m.refreshCursor()
 			return m, nil
 		}
@@ -255,14 +282,12 @@ func (m model) updateViewer(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.keys.SeekFwd):
 			m.seekMeasures(+1)
 			return m, nil
-		case key.Matches(msg, m.keys.Top):
-			m.vp.GotoTop()
-			return m, nil
-		case key.Matches(msg, m.keys.Bottom):
-			m.vp.GotoBottom()
+		case key.Matches(msg, m.keys.Notes):
+			m.toggleNotes()
 			return m, nil
 		case key.Matches(msg, m.keys.Help):
 			m.help.ShowAll = !m.help.ShowAll
+			m.resizeViewer()
 			return m, nil
 		case key.Matches(msg, m.keys.Back):
 			m.closePlayer()
@@ -271,10 +296,44 @@ func (m model) updateViewer(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.path = ""
 			return m, m.picker.Init()
 		}
+		if m.notes.open {
+			switch {
+			case key.Matches(msg, m.keys.Up):
+				m.selectNote(m.notes.sel - 1)
+				return m, nil
+			case key.Matches(msg, m.keys.Down):
+				m.selectNote(m.notes.sel + 1)
+				return m, nil
+			case key.Matches(msg, m.keys.Top):
+				m.selectNote(0)
+				return m, nil
+			case key.Matches(msg, m.keys.Bottom):
+				m.selectNote(len(m.notes.lines) - 1)
+				return m, nil
+			case key.Matches(msg, m.keys.PlayFrom):
+				return m.playFromSelection()
+			}
+		}
+		switch {
+		case key.Matches(msg, m.keys.Top):
+			m.vp.GotoTop()
+			return m, nil
+		case key.Matches(msg, m.keys.Bottom):
+			m.vp.GotoBottom()
+			return m, nil
+		}
 	}
 	var cmd tea.Cmd
 	m.vp, cmd = m.vp.Update(msg)
 	return m, cmd
+}
+
+func (m *model) toggleNotes() {
+	m.notes.open = !m.notes.open
+	m.resizeViewer()
+	if m.notes.open {
+		m.syncNoteSel()
+	}
 }
 
 func (m model) togglePlayback() (tea.Model, tea.Cmd) {
@@ -288,7 +347,7 @@ func (m model) togglePlayback() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if m.player.Done() {
-		m.player.SeekSec(0)
+		m.setPos(0)
 	}
 	if err := m.player.Play(); err != nil {
 		m.audioErr = err
@@ -298,17 +357,58 @@ func (m model) togglePlayback() (tea.Model, tea.Cmd) {
 	return m, m.ensureTick()
 }
 
-func (m *model) seekMeasures(delta float64) {
-	if m.player == nil || m.res == nil {
+func (m model) playFromSelection() (tea.Model, tea.Cmd) {
+	m.selectNote(m.notes.sel)
+	if m.player == nil || m.player.Playing() {
+		return m, nil
+	}
+	if err := m.player.Play(); err != nil {
+		m.audioErr = err
+		return m, nil
+	}
+	return m, m.ensureTick()
+}
+
+func (m *model) selectNote(i int) {
+	if m.res == nil || len(m.res.Notes) == 0 {
 		return
 	}
-	measureSec := 240.0 / m.res.BPM
-	m.player.SeekSec(m.player.PosSec() + delta*measureSec)
-	m.refreshCursor()
-	if !m.player.Playing() {
-		block, col := m.res.Layout.SlotCell(m.curSlot)
-		m.followCursor(block, col)
+	m.notes.setSel(i)
+	m.setPos(m.res.Notes[m.notes.sel].StartSec)
+	m.ensureCursorVisible()
+}
+
+func (m *model) seekMeasures(delta float64) {
+	if m.res == nil {
+		return
 	}
+	m.setPos(m.curPos + delta*240.0/m.res.BPM)
+	m.syncNoteSel()
+	m.ensureCursorVisible()
+}
+
+func (m *model) setPos(t float64) {
+	if m.res == nil {
+		return
+	}
+	if t < 0 {
+		t = 0
+	}
+	if d := m.res.DurationSec; d > 0 && t > d {
+		t = d
+	}
+	m.curPos = t
+	if m.player != nil {
+		m.player.SeekSec(t)
+	}
+	m.refreshCursor()
+}
+
+func (m *model) syncNoteSel() {
+	if m.res == nil || len(m.res.Notes) == 0 {
+		return
+	}
+	m.notes.setSel(app.NoteAt(m.res, m.curPos))
 }
 
 func (m *model) ensureTick() tea.Cmd {
@@ -334,16 +434,29 @@ func (m *model) closePlayer() {
 	m.tickRunning = false
 }
 
+func (m model) playing() bool {
+	return m.player != nil && m.player.Playing()
+}
+
 func (m *model) refreshCursor() {
-	if m.res == nil || m.player == nil || len(m.res.Notes) == 0 {
+	if m.res == nil || len(m.res.Notes) == 0 {
 		return
 	}
-	m.curSlot = cursorSlot(m.res, m.player.PosSec())
+	m.curSlot = cursorSlot(m.res, m.curPos)
 	block, col := m.res.Layout.SlotCell(m.curSlot)
 	m.vp.SetContent(highlightColumn(m.res.Tab, m.res.Layout, block, col, cursorStyle))
-	if m.player.Playing() {
+	if m.playing() {
+		m.syncNoteSel()
 		m.followCursor(block, col)
 	}
+}
+
+func (m *model) ensureCursorVisible() {
+	if m.res == nil {
+		return
+	}
+	block, col := m.res.Layout.SlotCell(m.curSlot)
+	m.followCursor(block, col)
 }
 
 func (m *model) followCursor(block, col int) {
@@ -404,5 +517,9 @@ func (m model) viewerView() string {
 	if m.audioErr != nil {
 		header += "\n" + errStyle.Render("playback unavailable: "+m.audioErr.Error())
 	}
-	return header + "\n" + m.vp.View() + "\n" + m.help.View(m.keys)
+	s := header + "\n" + m.vp.View()
+	if m.notes.open {
+		s += "\n" + m.notes.View(m.w)
+	}
+	return s + "\n" + m.help.View(m.keys)
 }
