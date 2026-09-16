@@ -12,13 +12,17 @@
 # repetition (55.8 Hz, confirmed by both oracles) was recorded as absent, so
 # the suite stayed green while the pipeline dropped four real notes.
 #
-# This list is what the pipeline should currently find, not everything that is
-# played. The oracles also show an F#1 (47.0 Hz) at 2.57 s of every repetition
-# that our onset stage misses entirely, and a few same-pitch repeats that could
+# Two notes per repetition were recovered after this file was first written from
+# ground truth: the A1 at 5.03 s (the pitch stage rejected it) and the F#1 at
+# 2.57 s (the onset stage did not see it). Both were predicted from the oracles
+# before the code changed, and both landed at the predicted times.
+#
+# This list is what the pipeline should currently find, not necessarily
+# everything that is played. The oracles also show same-pitch repeats that could
 # not be told apart from onset re-triggers by signal alone. See "Known
 # limitations" in README.md.
 
-28 30 33 30 28 28 30 28 30 33 30 28 28 35 36
-28 30 33 30 28 28 30 28 30 33 30 28 28 35 36
-28 30 33 30 28 28 30 28 30 33 30 28 28 35 36
-28 30 33 30 28 28 30 28 30 33 30 28 28 35 36
+28 30 33 30 28 28 30 30 28 30 33 30 28 28 35 36
+28 30 33 30 28 28 30 30 28 30 33 30 28 28 35 36
+28 30 33 30 28 28 30 30 28 30 33 30 28 28 35 36
+28 30 33 30 28 28 30 30 28 30 33 30 28 28 35 36

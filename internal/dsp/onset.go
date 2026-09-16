@@ -6,7 +6,7 @@ const (
 	envWin      = 512
 	envHop      = 256
 	envSmooth   = 2
-	fluxStdMult = 2.5
+	fluxStdMult = 2.2
 	gateRatio   = 0.05
 	minGapSec   = 0.060
 	endRatio    = 0.1
