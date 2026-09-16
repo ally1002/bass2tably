@@ -1,12 +1,19 @@
 package dsp
 
-import "math"
+import (
+	"math"
+	"math/cmplx"
+	"slices"
+)
 
 const (
 	envWin      = 512
 	envHop      = 256
 	envSmooth   = 2
 	fluxStdMult = 2.2
+	fluxWin     = 1024
+	fluxHop     = 256
+	fluxMult    = 2.0
 	gateRatio   = 0.05
 	minGapSec   = 0.060
 	endRatio    = 0.1
@@ -22,7 +29,16 @@ func Segments(samples []float64, sampleRate int) []Segment {
 	if len(env) < 3 {
 		return nil
 	}
-	onsets := onsetFrames(env, sampleRate)
+	rms := framesToSamples(pickOnsets(flux(env), sampleRate, envHop, fluxStdMult, env, gateRatio), envHop, 0)
+	hfc := framesToSamples(pickOnsets(hfcFlux(samples), sampleRate, fluxHop, fluxMult, nil, 0), fluxHop, fluxWin/2)
+	minGap := int(math.Ceil(minGapSec * float64(sampleRate)))
+
+	var onsets []int
+	for _, s := range mergeOnsets(rms, hfc, minGap) {
+		if k := s / envHop; k < len(env) {
+			onsets = append(onsets, k)
+		}
+	}
 	segs := make([]Segment, 0, len(onsets))
 	for i, k := range onsets {
 		limit := len(env)
@@ -82,38 +98,113 @@ func smooth(x []float64, radius int) []float64 {
 	return out
 }
 
-func onsetFrames(env []float64, sampleRate int) []int {
-	var envMax float64
-	for _, e := range env {
-		if e > envMax {
-			envMax = e
+func flux(x []float64) []float64 {
+	out := make([]float64, len(x))
+	for k := 1; k < len(x); k++ {
+		if d := x[k] - x[k-1]; d > 0 {
+			out[k] = d
 		}
 	}
-	if envMax == 0 {
+	return out
+}
+
+func hfcFlux(x []float64) []float64 {
+	if len(x) < fluxWin {
 		return nil
 	}
-	gate := gateRatio * envMax
-
-	flux := make([]float64, len(env))
-	for k := 1; k < len(env); k++ {
-		if d := env[k] - env[k-1]; d > 0 {
-			flux[k] = d
-		}
+	win := make([]float64, fluxWin)
+	for i := range win {
+		win[i] = 0.5 - 0.5*math.Cos(2*math.Pi*float64(i)/float64(fluxWin))
 	}
-	mean, std := meanStd(flux)
-	thresh := mean + fluxStdMult*std
-	minGap := int(math.Ceil(minGapSec * float64(sampleRate) / envHop))
 
-	var onsets []int
-	for k := 1; k < len(flux)-1; k++ {
-		if flux[k] < flux[k-1] || flux[k] <= flux[k+1] {
+	n := (len(x)-fluxWin)/fluxHop + 1
+	out := make([]float64, n)
+	buf := make([]complex128, fluxWin)
+	prev := make([]float64, fluxWin/2+1)
+	cur := make([]float64, fluxWin/2+1)
+	for k := 0; k < n; k++ {
+		base := k * fluxHop
+		for i := 0; i < fluxWin; i++ {
+			buf[i] = complex(x[base+i]*win[i], 0)
+		}
+		fft(buf)
+		for b := range cur {
+			cur[b] = math.Log(1 + 1000*cmplx.Abs(buf[b]))
+		}
+		if k > 0 {
+			var s float64
+			for b := 1; b < len(cur); b++ {
+				if d := cur[b] - prev[b]; d > 0 {
+					s += d * float64(b)
+				}
+			}
+			out[k] = s
+		}
+		prev, cur = cur, prev
+	}
+	return out
+}
+
+func framesToSamples(frames []int, hop, offset int) []int {
+	out := make([]int, len(frames))
+	for i, k := range frames {
+		out[i] = k*hop + offset
+	}
+	return out
+}
+
+func mergeOnsets(primary, extra []int, minGap int) []int {
+	out := append([]int(nil), primary...)
+	slices.Sort(out)
+	for _, s := range extra {
+		i, _ := slices.BinarySearch(out, s)
+		if i > 0 && s-out[i-1] < minGap {
 			continue
 		}
-		if flux[k] <= thresh || env[k] <= gate {
+		if i < len(out) && out[i]-s < minGap {
+			continue
+		}
+		out = slices.Insert(out, i, s)
+	}
+	return out
+}
+
+func pickOnsets(nov []float64, sampleRate, hop int, mult float64, gate []float64, gateRatio float64) []int {
+	if len(nov) < 3 {
+		return nil
+	}
+
+	var level float64
+	if gate != nil {
+		var max float64
+		for _, g := range gate {
+			if g > max {
+				max = g
+			}
+		}
+		if max == 0 {
+			return nil
+		}
+		level = gateRatio * max
+	}
+
+	mean, std := meanStd(nov)
+	thresh := mean + mult*std
+	minGap := int(math.Ceil(minGapSec * float64(sampleRate) / float64(hop)))
+
+	var onsets []int
+	for k := 1; k < len(nov)-1; k++ {
+		if nov[k] < nov[k-1] || nov[k] <= nov[k+1] {
+			continue
+		}
+		if nov[k] <= thresh {
+			continue
+		}
+		if gate != nil && (k >= len(gate) || gate[k] <= level) {
 			continue
 		}
 		if len(onsets) > 0 && k-onsets[len(onsets)-1] < minGap {
-			if flux[k] > flux[onsets[len(onsets)-1]] {
+			if nov[k] > nov[onsets[len(onsets)-1]] {
 				onsets[len(onsets)-1] = k
 			}
 			continue
