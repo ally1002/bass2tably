@@ -3,7 +3,7 @@ package dsp
 import "sort"
 
 const (
-	yinWin        = 4096
+	yinWin        = 3072
 	yinHop        = 1024
 	yinFmin       = 28.0
 	yinFmax       = 450.0
