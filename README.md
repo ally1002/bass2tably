@@ -73,3 +73,5 @@ Tests that need an audio device skip themselves when none is available.
 - Notes shorter than ~60 ms merge into their neighbor.
 - Low-frequency rolloff in the recording (phone mic, aggressive highpass) can drop onsets on the low B string.
 - Tempo is assumed constant for the whole take.
+- Percussive playing with a wide dynamic range (slap and pop, ghost notes) loses the quiet attacks. The onset threshold is computed once for the whole take, so loud slaps raise it above everything quieter: on a slap recording we found 89 of the 142 attacks an independent detector reports, all of the misses being loud enough to pass the level gate but too gradual to pass the global flux threshold.
+- A note repeated at the same pitch and a sustained note that re-triggers the onset detector are not reliably told apart, so some repeats are merged.

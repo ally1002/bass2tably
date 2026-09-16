@@ -1,56 +1,24 @@
-28
-30
-33
-30
-28
-28
-30
-28
-30
-30
-28
-28
-35
-36
-28
-30
-33
-30
-28
-28
-30
-28
-30
-30
-28
-28
-35
-36
-28
-30
-33
-30
-28
-28
-30
-28
-30
-30
-28
-28
-35
-36
-28
-30
-33
-30
-28
-28
-30
-28
-30
-30
-28
-28
-35
-36
+# Ground truth for shh.wav. Derived from independent oracles, NOT from
+# bass2tably's own output.
+#
+# The take is one 15-note phrase played four times, exactly 8.0 s apart.
+# Every note below is backed by an onset from `aubioonset -B 2048 -H 256`
+# and a stable pitch from `aubiopitch -p yin -B 4096 -H 1024`. Folding the
+# oracle onsets over the 8.0 s period lands all four repetitions on the same
+# phases, so each note is confirmed four times over.
+#
+# Do NOT regenerate this file from bass2tably's output. A previous version was
+# blessed that way and locked in a false negative: the A1 at 5.03 s of every
+# repetition (55.8 Hz, confirmed by both oracles) was recorded as absent, so
+# the suite stayed green while the pipeline dropped four real notes.
+#
+# This list is what the pipeline should currently find, not everything that is
+# played. The oracles also show an F#1 (47.0 Hz) at 2.57 s of every repetition
+# that our onset stage misses entirely, and a few same-pitch repeats that could
+# not be told apart from onset re-triggers by signal alone. See "Known
+# limitations" in README.md.
+
+28 30 33 30 28 28 30 28 30 33 30 28 28 35 36
+28 30 33 30 28 28 30 28 30 33 30 28 28 35 36
+28 30 33 30 28 28 30 28 30 33 30 28 28 35 36
+28 30 33 30 28 28 30 28 30 33 30 28 28 35 36
