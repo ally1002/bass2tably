@@ -2,7 +2,7 @@
 
 Turns a bass recording into an ASCII bass tab in the terminal — either printed once, or in an interactive TUI that plays the audio back with a cursor running over the tab. Optionally writes a Standard MIDI File too, so riffs never get forgotten again.
 
-Pure Go DSP (YIN pitch detection + energy-based onset detection), no machine learning. Audio playback uses miniaudio through cgo; non-WAV input is decoded with the system `ffmpeg`.
+Pure Go DSP (YIN pitch detection, onsets from a broadband energy envelope unioned with high-frequency spectral flux), no machine learning. Audio playback uses miniaudio through cgo; non-WAV input is decoded with the system `ffmpeg`.
 
 ## Usage
 
@@ -69,9 +69,9 @@ Tests that need an audio device skip themselves when none is available.
 
 - No chords or double stops — the pipeline is strictly monophonic.
 - No slides, bends, or hammer-ons: they come out as separate notes or wrong pitches.
-- Sixteenth notes above ~160 BPM leave too few analysis frames per note for reliable pitch.
-- Notes shorter than ~60 ms merge into their neighbor.
+- Sixteenth notes are found completely up to ~160 BPM (94 ms per note): 16 of 16 attacks on a synthetic run, every one pitched. Past that the result turns erratic — 12 of 16 at 180 BPM (83 ms), 15 of 16 at 200 BPM (75 ms). Pitch is not the limit; every segment that is found still resolves a pitch at 75 ms. The 60 ms merge window is, because it discards a correct spectral onset whenever the broadband detector has already placed a late one within that distance.
+- Notes closer together than 60 ms merge into one. That window is also what stops a single pluck registering as two notes, so it cannot simply be shortened.
 - Low-frequency rolloff in the recording (phone mic, aggressive highpass) can drop onsets on the low B string.
 - Tempo is assumed constant for the whole take.
-- Percussive playing with a wide dynamic range (slap and pop, ghost notes) loses the quiet attacks. The onset threshold is computed once for the whole take, so loud slaps raise it above everything quieter: on a slap recording we find 100 of the 142 attacks an independent detector reports, the misses being loud enough to pass the level gate but too gradual to pass the global flux threshold.
-- A note repeated at the same pitch and a sustained note that re-triggers the onset detector are not reliably told apart, so some repeats are merged.
+- Percussive playing with a wide dynamic range (slap and pop, ghost notes) loses the quiet attacks. The onset threshold is computed once for the whole take, so loud slaps raise it above everything quieter: on a slap recording we find 100 of the 142 attacks an independent detector reports, the misses being loud enough to pass the level gate but too gradual to pass the global flux threshold. The spectral detector does not help here — measured against the same recording at equal precision it finds fewer attacks than the broadband one, not more.
+- A note repeated at the same pitch on a string that is still ringing is now caught in most cases: 37 of the 38 attacks in `testdata/ahhintro.wav`, against 27 before, of which 33 resolve a pitch and reach the tab. Long uniform runs are where the misses concentrate — a bar of eleven G1 eighths comes out as eight.
