@@ -1,0 +1,9 @@
+# Ground truth for ahhintro.wav (first four measures of ahh.wav, ~79.5 BPM).
+# Derived from the player's own transcription of the take, NOT from
+# bass2tably's output. Cross-checked against aubioonset -B 2048 -H 256
+# and aubiopitch -p yin -B 4096 -H 1024.
+# Do NOT regenerate this file from our output (see PLAN.md E4).
+28 28 28 28 36 35 35
+28 28 28 28 36 35 31 28 33
+33 33 33 33 33 33 33 33 33
+31 31 31 31 31 31 31 31 31 31 31 23 26
