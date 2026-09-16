@@ -59,6 +59,49 @@ func TestAssignTestRiff(t *testing.T) {
 	}
 }
 
+func TestRenderLayoutShortFrets(t *testing.T) {
+	notes := []music.Note{
+		{Midi: 33, Slot: 0, Len: 1},
+		{Midi: 28, Slot: 4, Len: 1},
+	}
+	frets := []tab.Fretting{{String: 2, Fret: 0}}
+	out, layout := tab.RenderLayout(notes, frets, beadg, 4)
+	if layout.Rows != len(beadg) {
+		t.Errorf("Rows = %d, want %d", layout.Rows, len(beadg))
+	}
+	if got := countDigits(out); got != 1 {
+		t.Errorf("rendered %d fret digits, want 1 (the note without a fret entry must be dropped):\n%s", got, out)
+	}
+}
+
+func TestRenderLayoutOutOfRangeString(t *testing.T) {
+	notes := []music.Note{
+		{Midi: 33, Slot: 0, Len: 1},
+		{Midi: 28, Slot: 4, Len: 1},
+	}
+	frets := []tab.Fretting{{String: 2, Fret: 0}, {String: 7, Fret: 3}}
+	out, layout := tab.RenderLayout(notes, frets, beadg, 4)
+	if out == "" {
+		t.Fatal("got empty output")
+	}
+	if layout.Rows != len(beadg) {
+		t.Errorf("Rows = %d, want %d", layout.Rows, len(beadg))
+	}
+	if strings.Contains(out, "3-") {
+		t.Errorf("output contains fret for out-of-range string:\n%s", out)
+	}
+}
+
+func TestRenderLayoutEmptyNotes(t *testing.T) {
+	out, layout := tab.RenderLayout(nil, nil, beadg, 4)
+	if out == "" {
+		t.Fatal("got empty output")
+	}
+	if layout.Measures != 1 {
+		t.Errorf("Measures = %d, want 1", layout.Measures)
+	}
+}
+
 func TestRenderTestRiff(t *testing.T) {
 	notes := riffNotes()
 	out := tab.Render(notes, tab.Assign(notes, beadg, 0), beadg, 4)
@@ -73,4 +116,14 @@ func TestRenderTestRiff(t *testing.T) {
 	if out != want {
 		t.Errorf("render mismatch:\ngot:\n%s\nwant:\n%s", out, want)
 	}
+}
+
+func countDigits(s string) int {
+	n := 0
+	for _, r := range s {
+		if r >= '0' && r <= '9' {
+			n++
+		}
+	}
+	return n
 }

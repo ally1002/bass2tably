@@ -141,7 +141,7 @@ func RenderLayout(notes []music.Note, frets []Fretting, tuning []int, gridDiv in
 
 	totalSlots := slotsPerMeasure
 	for i, n := range notes {
-		if frets[i].String < 0 {
+		if i >= len(frets) || frets[i].String < 0 {
 			continue
 		}
 		if n.Slot+1 > totalSlots {
@@ -159,8 +159,11 @@ func RenderLayout(notes []music.Note, frets []Fretting, tuning []int, gridDiv in
 	}
 	cellW := 2
 	for i, n := range notes {
+		if i >= len(frets) {
+			continue
+		}
 		f := frets[i]
-		if f.String < 0 {
+		if f.String < 0 || f.String >= len(tuning) {
 			continue
 		}
 		cells[f.String][n.Slot] = f.Fret

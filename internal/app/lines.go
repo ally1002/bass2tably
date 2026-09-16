@@ -15,13 +15,21 @@ func (r *Result) StringName(s int) string {
 	return strings.TrimRight(music.MidiName(r.Tuning[s]), "-0123456789")
 }
 
+func (r *Result) fretAt(i int) tab.Fretting {
+	if i < len(r.Frets) {
+		return r.Frets[i]
+	}
+	return tab.Fretting{String: -1, Fret: -1}
+}
+
 func (r *Result) NoteLines() []string {
 	alts := make([]string, len(r.Notes))
 	altW := 0
 	for i, n := range r.Notes {
+		f := r.fretAt(i)
 		var parts []string
 		for _, p := range tab.Positions(n.Midi, r.Tuning) {
-			if p == r.Frets[i] {
+			if p == f {
 				continue
 			}
 			parts = append(parts, fmt.Sprintf("%s fret %d", r.StringName(p.String), p.Fret))
@@ -36,7 +44,7 @@ func (r *Result) NoteLines() []string {
 
 	lines := make([]string, len(r.Notes))
 	for i, n := range r.Notes {
-		f := r.Frets[i]
+		f := r.fretAt(i)
 		pos := "unplayable in this tuning"
 		if f.String >= 0 {
 			pos = fmt.Sprintf("string %s fret %d", r.StringName(f.String), f.Fret)

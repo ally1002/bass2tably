@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strings"
 	"testing"
 
 	"bass2tably/internal/music"
@@ -82,5 +83,34 @@ func TestNoteLinesEmpty(t *testing.T) {
 	r := &Result{GridDiv: 4, Tuning: []int{23, 28, 33, 38, 43}}
 	if got := r.NoteLines(); len(got) != 0 {
 		t.Fatalf("got %d lines for a result with no notes, want 0", len(got))
+	}
+}
+
+func TestNoteLinesShortFrets(t *testing.T) {
+	r := &Result{
+		GridDiv: 4,
+		Tuning:  []int{23, 28, 33, 38, 43},
+		Notes: []music.Note{
+			{Midi: 33, StartSec: 0.02, Len: 2},
+			{Midi: 28, StartSec: 0.60, Len: 4},
+		},
+		Frets: []tab.Fretting{{String: 2, Fret: 0}},
+	}
+	got := r.NoteLines()
+	if len(got) != 2 {
+		t.Fatalf("got %d lines, want 2", len(got))
+	}
+	if !strings.Contains(got[1], "unplayable in this tuning") {
+		t.Errorf("line for note with no fret = %q, want it marked unplayable", got[1])
+	}
+}
+
+func TestStringNameOutOfRange(t *testing.T) {
+	r := &Result{Tuning: []int{23, 28, 33, 38, 43}}
+	if got := r.StringName(5); got != "?" {
+		t.Errorf("StringName(5) = %q, want %q", got, "?")
+	}
+	if got := r.StringName(-1); got != "?" {
+		t.Errorf("StringName(-1) = %q, want %q", got, "?")
 	}
 }

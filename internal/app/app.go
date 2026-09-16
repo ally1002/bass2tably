@@ -46,6 +46,18 @@ type Result struct {
 	Layout       tab.Layout
 }
 
+func (r *Result) Valid() error {
+	if len(r.Frets) != len(r.Notes) {
+		return fmt.Errorf("app: Frets has %d entries, want %d (one per Note)", len(r.Frets), len(r.Notes))
+	}
+	for i, f := range r.Frets {
+		if f.String >= len(r.Tuning) {
+			return fmt.Errorf("app: Frets[%d].String = %d out of range for Tuning of length %d", i, f.String, len(r.Tuning))
+		}
+	}
+	return nil
+}
+
 func Analyze(path string, opts Options) (*Result, error) {
 	open, ok := Tunings[opts.Tuning]
 	if !ok {
@@ -100,7 +112,7 @@ func Analyze(path string, opts Options) (*Result, error) {
 	frets := tab.Assign(notes, open, opts.Position)
 	tabStr, layout := tab.RenderLayout(notes, frets, open, gridDiv)
 
-	return &Result{
+	result := &Result{
 		Path:         path,
 		SampleRate:   clip.SampleRate,
 		DurationSec:  clip.Duration(),
@@ -115,5 +127,9 @@ func Analyze(path string, opts Options) (*Result, error) {
 		Skipped:      skipped,
 		Tab:          tabStr,
 		Layout:       layout,
-	}, nil
+	}
+	if err := result.Valid(); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
