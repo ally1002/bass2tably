@@ -7,14 +7,11 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"bass2tably/internal/app"
 	"bass2tably/internal/music"
 	"bass2tably/internal/tab"
 )
 
-func renderFixture(t *testing.T) (string, tab.Layout, []music.Note, []tab.Fretting) {
-	t.Helper()
-	tuning := []int{23, 28, 33, 38, 43}
+func cursorFixtureNotesFrets() ([]music.Note, []tab.Fretting) {
 	notes := []music.Note{
 		{Midi: 33, Slot: 0, Len: 1},
 		{Midi: 45, Slot: 17, Len: 1},
@@ -25,34 +22,35 @@ func renderFixture(t *testing.T) (string, tab.Layout, []music.Note, []tab.Fretti
 		{String: 2, Fret: 12},
 		{String: 3, Fret: 12},
 	}
-	s, l := tab.RenderLayout(notes, frets, tuning, 4)
-	return s, l, notes, frets
+	return notes, frets
 }
 
 func TestHighlightColumnStripsBackToPlain(t *testing.T) {
-	s, l, notes, _ := renderFixture(t)
-	for _, n := range notes {
-		block, col := l.SlotCell(n.Slot)
-		got := ansi.Strip(highlightColumn(s, l, block, col, cursorStyle))
-		if got != s {
+	notes, frets := cursorFixtureNotesFrets()
+	res := newResult(t, notes, frets, 100, 4, 0)
+	for _, n := range res.Notes {
+		block, col := res.Layout.SlotCell(n.Slot)
+		got := ansi.Strip(highlightColumn(res.Tab, res.Layout, block, col, cursorStyle))
+		if got != res.Tab {
 			t.Fatalf("slot %d: stripped highlight differs from plain render", n.Slot)
 		}
 	}
 }
 
 func TestHighlightColumnStylesExactCell(t *testing.T) {
-	s, l, notes, _ := renderFixture(t)
-	plain := strings.Split(s, "\n")
-	for _, n := range notes {
-		block, col := l.SlotCell(n.Slot)
-		out := strings.Split(highlightColumn(s, l, block, col, cursorStyle), "\n")
+	notes, frets := cursorFixtureNotesFrets()
+	res := newResult(t, notes, frets, 100, 4, 0)
+	plain := strings.Split(res.Tab, "\n")
+	for _, n := range res.Notes {
+		block, col := res.Layout.SlotCell(n.Slot)
+		out := strings.Split(highlightColumn(res.Tab, res.Layout, block, col, cursorStyle), "\n")
 		if len(out) != len(plain) {
 			t.Fatalf("slot %d: line count changed", n.Slot)
 		}
-		start := block * (l.Rows + 1)
+		start := block * (res.Layout.Rows + 1)
 		for r := range plain {
-			if r >= start && r < start+l.Rows {
-				want := plain[r][:col] + cursorStyle.Render(plain[r][col:col+l.CellW]) + plain[r][col+l.CellW:]
+			if r >= start && r < start+res.Layout.Rows {
+				want := plain[r][:col] + cursorStyle.Render(plain[r][col:col+res.Layout.CellW]) + plain[r][col+res.Layout.CellW:]
 				if out[r] != want {
 					t.Errorf("slot %d row %d: styled line mismatch", n.Slot, r)
 				}
@@ -64,30 +62,33 @@ func TestHighlightColumnStylesExactCell(t *testing.T) {
 }
 
 func TestCursorSlotClamps(t *testing.T) {
-	_, l, notes, frets := renderFixture(t)
-	res := &app.Result{
-		BPM:     100,
-		GridDiv: 4,
-		Notes:   notes,
-		Frets:   frets,
-		Layout:  l,
-	}
+	notes, frets := cursorFixtureNotesFrets()
+	res := newResult(t, notes, frets, 100, 4, 0)
 	if got := cursorSlot(res, -10); got != 0 {
 		t.Errorf("cursorSlot(-10) = %d, want 0", got)
 	}
-	maxSlot := l.Measures*l.SlotsPerMeasure - 1
+	maxSlot := res.Layout.Measures*res.Layout.SlotsPerMeasure - 1
 	if got := cursorSlot(res, 9999); got != maxSlot {
 		t.Errorf("cursorSlot(9999) = %d, want %d", got, maxSlot)
 	}
 	slotSec := 60.0 / res.BPM / float64(res.GridDiv)
-	if got := cursorSlot(res, notes[0].StartSec+17*slotSec); got != 17 {
+	if got := cursorSlot(res, res.Notes[0].StartSec+17*slotSec); got != 17 {
 		t.Errorf("cursorSlot at slot 17 time = %d, want 17", got)
+	}
+}
+
+func TestCursorSlotNoNotesDoesNotPanic(t *testing.T) {
+	res := newResult(t, nil, nil, 100, 4, 0)
+	if got := cursorSlot(res, 5); got != 0 {
+		t.Errorf("cursorSlot with no notes = %d, want 0", got)
 	}
 }
 
 func TestStaleTickDies(t *testing.T) {
 	m := newModel("x.wav", testOpts)
-	m, _ = advance(t, m, analysisDoneMsg{&app.Result{Tab: "G|---|\n"}})
+	res := testResult(t)
+	res.Samples = nil
+	m, _ = advance(t, m, analysisDoneMsg{res})
 	m.tickGen = 5
 	m.tickRunning = true
 	m2, cmd := advance(t, m, tickMsg{gen: 4})
@@ -101,7 +102,9 @@ func TestStaleTickDies(t *testing.T) {
 
 func TestTickWithoutPlayerStops(t *testing.T) {
 	m := newModel("x.wav", testOpts)
-	m, _ = advance(t, m, analysisDoneMsg{&app.Result{Tab: "G|---|\n"}})
+	res := testResult(t)
+	res.Samples = nil
+	m, _ = advance(t, m, analysisDoneMsg{res})
 	m.tickGen = 5
 	m.tickRunning = true
 	m2, cmd := advance(t, m, tickMsg{gen: 5})
@@ -114,36 +117,23 @@ func TestTickWithoutPlayerStops(t *testing.T) {
 }
 
 func TestSeekClampsAndPausedSeekMovesCursorOnly(t *testing.T) {
-	s, l, notes, frets := renderFixture(t)
-	res := &app.Result{
-		Path:        "x.wav",
-		SampleRate:  44100,
-		DurationSec: 1.0,
-		Tuning:      []int{23, 28, 33, 38, 43},
-		Samples:     make([]float64, 44100),
-		BPM:         100,
-		GridDiv:     4,
-		Notes:       notes,
-		Frets:       frets,
-		Tab:         s,
-		Layout:      l,
-	}
+	notes, frets := cursorFixtureNotesFrets()
+	res := newResult(t, notes, frets, 100, 4, 1.0)
+	sp := &stubPlayer{}
 	m := newModel("x.wav", testOpts)
+	m.newPlayer = func(samples []float64, rate int) (player, error) { return sp, nil }
 	m, _ = advance(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m, _ = advance(t, m, analysisDoneMsg{res})
-	if m.player == nil {
-		t.Skipf("no audio device available: %v", m.audioErr)
-	}
 	defer m.closePlayer()
 
 	m, cmd := advance(t, m, keyPress('.'))
 	if cmd != nil {
 		t.Error("seek produced a command")
 	}
-	if pos := m.player.PosSec(); pos != 1.0 {
+	if pos := sp.PosSec(); pos != 1.0 {
 		t.Errorf("PosSec after +1 measure on a 1 s clip = %.4f, want clamped to 1.0", pos)
 	}
-	if m.player.Playing() {
+	if sp.Playing() {
 		t.Error("seek while paused must not start playback")
 	}
 	if m.curSlot == 0 {
@@ -152,20 +142,22 @@ func TestSeekClampsAndPausedSeekMovesCursorOnly(t *testing.T) {
 
 	m, _ = advance(t, m, keyPress(','))
 	m, _ = advance(t, m, keyPress(','))
-	if pos := m.player.PosSec(); pos != 0 {
+	if pos := sp.PosSec(); pos != 0 {
 		t.Errorf("PosSec after seeking past the start = %.4f, want clamped to 0", pos)
 	}
 	if m.curSlot != 0 {
 		t.Errorf("curSlot = %d after seeking to start, want 0", m.curSlot)
 	}
-	if m.player.Playing() {
+	if sp.Playing() {
 		t.Error("seek while paused must not start playback")
 	}
 }
 
 func TestSpaceWithoutPlayerIsIgnored(t *testing.T) {
 	m := newModel("x.wav", testOpts)
-	m, _ = advance(t, m, analysisDoneMsg{&app.Result{Tab: "G|---|\n"}})
+	res := testResult(t)
+	res.Samples = nil
+	m, _ = advance(t, m, analysisDoneMsg{res})
 	m2, cmd := advance(t, m, tea.KeyPressMsg{Code: tea.KeySpace, Text: " "})
 	if cmd != nil {
 		t.Fatal("space with no player produced a command")

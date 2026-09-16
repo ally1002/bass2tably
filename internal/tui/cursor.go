@@ -13,6 +13,9 @@ import (
 var cursorStyle = lipgloss.NewStyle().Reverse(true)
 
 func cursorSlot(res *app.Result, posSec float64) int {
+	if len(res.Notes) == 0 {
+		return 0
+	}
 	slotSec := 60.0 / res.BPM / float64(res.GridDiv)
 	t0 := res.Notes[0].StartSec
 	slot := int(math.Round((posSec - t0) / slotSec))

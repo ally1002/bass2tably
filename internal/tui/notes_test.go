@@ -5,48 +5,20 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
-
-	"bass2tably/internal/app"
-	"bass2tably/internal/music"
-	"bass2tably/internal/tab"
 )
 
-func notesResult(t *testing.T) *app.Result {
+func viewerWithNotes(t *testing.T) (model, *stubPlayer) {
 	t.Helper()
-	tuning := []int{23, 28, 33, 38, 43}
-	notes := []music.Note{
-		{Midi: 33, StartSec: 0.0, Slot: 0, Len: 4},
-		{Midi: 38, StartSec: 0.6, Slot: 4, Len: 4},
-		{Midi: 40, StartSec: 1.2, Slot: 8, Len: 4},
-		{Midi: 43, StartSec: 1.8, Slot: 12, Len: 4},
-	}
-	frets := []tab.Fretting{{String: 2, Fret: 0}, {String: 3, Fret: 0}, {String: 3, Fret: 2}, {String: 4, Fret: 0}}
-	s, l := tab.RenderLayout(notes, frets, tuning, 4)
-	return &app.Result{
-		Path:        "x.wav",
-		SampleRate:  44100,
-		DurationSec: 2.4,
-		Samples:     make([]float64, 44100*24/10),
-		BPM:         100,
-		GridDiv:     4,
-		Tuning:      tuning,
-		Notes:       notes,
-		Frets:       frets,
-		Tab:         s,
-		Layout:      l,
-	}
-}
-
-func viewerWithNotes(t *testing.T) model {
-	t.Helper()
+	sp := &stubPlayer{}
 	m := newModel("x.wav", testOpts)
+	m.newPlayer = func(samples []float64, rate int) (player, error) { return sp, nil }
 	m, _ = advance(t, m, tea.WindowSizeMsg{Width: 100, Height: 30})
-	m, _ = advance(t, m, analysisDoneMsg{notesResult(t)})
-	return m
+	m, _ = advance(t, m, analysisDoneMsg{testResult(t)})
+	return m, sp
 }
 
 func TestNotePanelTogglesAndShrinksViewport(t *testing.T) {
-	m := viewerWithNotes(t)
+	m, _ := viewerWithNotes(t)
 	defer m.closePlayer()
 
 	if m.notes.open {
@@ -82,7 +54,7 @@ func TestNotePanelTogglesAndShrinksViewport(t *testing.T) {
 }
 
 func TestNoteSelectionSeeksAndMovesCursor(t *testing.T) {
-	m := viewerWithNotes(t)
+	m, sp := viewerWithNotes(t)
 	defer m.closePlayer()
 	m, _ = advance(t, m, keyPress('n'))
 
@@ -96,23 +68,24 @@ func TestNoteSelectionSeeksAndMovesCursor(t *testing.T) {
 	if m.curSlot != 4 {
 		t.Errorf("curSlot = %d, want 4 (the selected note's slot)", m.curSlot)
 	}
-	if m.player != nil {
-		if got := m.player.PosSec(); got < 0.59 || got > 0.61 {
-			t.Errorf("player PosSec = %.3f, want ~0.600", got)
-		}
-		if m.player.Playing() {
-			t.Error("moving the selection must not start playback")
-		}
+	if got := sp.PosSec(); got != 0.6 {
+		t.Errorf("player PosSec = %.3f, want 0.600", got)
+	}
+	if sp.Playing() {
+		t.Error("moving the selection must not start playback")
 	}
 
 	m, _ = advance(t, m, keyPress('k'))
 	if m.notes.sel != 0 || m.curSlot != 0 {
 		t.Errorf("after k: sel = %d, curSlot = %d, want 0 and 0", m.notes.sel, m.curSlot)
 	}
+	if want := []float64{0.6, 0}; !equalSeeks(sp.seeks, want) {
+		t.Errorf("seeks = %v, want %v (each selection seeks to that note's start)", sp.seeks, want)
+	}
 }
 
 func TestNoteSelectionClampsAtEnds(t *testing.T) {
-	m := viewerWithNotes(t)
+	m, _ := viewerWithNotes(t)
 	defer m.closePlayer()
 	m, _ = advance(t, m, keyPress('n'))
 
@@ -132,7 +105,7 @@ func TestNoteSelectionClampsAtEnds(t *testing.T) {
 }
 
 func TestPanelKeysOnlyStealScrollWhileOpen(t *testing.T) {
-	m := viewerWithNotes(t)
+	m, _ := viewerWithNotes(t)
 	defer m.closePlayer()
 
 	m.vp.SetContent("a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk\nl\nm\nn\no\np\nq\nr\ns\nt")
@@ -154,12 +127,9 @@ func TestPanelKeysOnlyStealScrollWhileOpen(t *testing.T) {
 }
 
 func TestPanelFollowsPlaybackPosition(t *testing.T) {
-	m := viewerWithNotes(t)
+	m, _ := viewerWithNotes(t)
 	defer m.closePlayer()
 	m, _ = advance(t, m, keyPress('n'))
-	if m.player == nil {
-		t.Skipf("no audio device available: %v", m.audioErr)
-	}
 
 	m.curPos = 1.25
 	m.syncNoteSel()
@@ -174,25 +144,21 @@ func TestPanelFollowsPlaybackPosition(t *testing.T) {
 }
 
 func TestPlayFromSelectionStartsPlayback(t *testing.T) {
-	m := viewerWithNotes(t)
+	m, sp := viewerWithNotes(t)
 	defer m.closePlayer()
 	m, _ = advance(t, m, keyPress('n'))
-	if m.player == nil {
-		t.Skipf("no audio device available: %v", m.audioErr)
-	}
 
 	m, _ = advance(t, m, keyPress('j'))
 	m, cmd := advance(t, m, tea.KeyPressMsg{Code: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatal("enter did not start a tick chain")
 	}
-	if !m.player.Playing() {
+	if !sp.Playing() {
 		t.Error("enter did not start playback")
 	}
 	if !m.tickRunning {
 		t.Error("tickRunning not set after enter")
 	}
-	m.player.Pause()
 }
 
 func containsAll(s string, subs ...string) bool {
@@ -205,6 +171,18 @@ func containsAll(s string, subs ...string) bool {
 			}
 		}
 		if !found {
+			return false
+		}
+	}
+	return true
+}
+
+func equalSeeks(got, want []float64) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range want {
+		if got[i] != want[i] {
 			return false
 		}
 	}

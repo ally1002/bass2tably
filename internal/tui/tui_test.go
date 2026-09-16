@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"bass2tably/internal/app"
 )
@@ -31,7 +32,8 @@ func TestAnalysisDoneShowsViewer(t *testing.T) {
 		t.Fatalf("screen = %d, want analyzingScreen", m.screen)
 	}
 	m, _ = advance(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
-	res := &app.Result{Path: "x.wav", Tab: "G|1--|\nD|---|\n"}
+	res := testResult(t)
+	res.Samples = nil
 	m, _ = advance(t, m, analysisDoneMsg{res})
 	if m.screen != viewerScreen {
 		t.Fatalf("screen = %d, want viewerScreen", m.screen)
@@ -39,7 +41,7 @@ func TestAnalysisDoneShowsViewer(t *testing.T) {
 	if m.res != res {
 		t.Fatalf("res not stored")
 	}
-	if got := m.vp.GetContent(); got != res.Tab {
+	if got := ansi.Strip(m.vp.GetContent()); got != res.Tab {
 		t.Fatalf("viewport content = %q, want %q", got, res.Tab)
 	}
 }
@@ -76,7 +78,9 @@ func TestQuitKey(t *testing.T) {
 
 func TestEscReturnsToPicker(t *testing.T) {
 	m := newModel("x.wav", testOpts)
-	m, _ = advance(t, m, analysisDoneMsg{&app.Result{Tab: "G|---|\n"}})
+	res := testResult(t)
+	res.Samples = nil
+	m, _ = advance(t, m, analysisDoneMsg{res})
 	m, _ = advance(t, m, tea.KeyPressMsg{Code: tea.KeyEscape})
 	if m.screen != pickerScreen {
 		t.Fatalf("screen = %d, want pickerScreen", m.screen)
@@ -88,7 +92,9 @@ func TestEscReturnsToPicker(t *testing.T) {
 
 func TestHelpToggle(t *testing.T) {
 	m := newModel("x.wav", testOpts)
-	m, _ = advance(t, m, analysisDoneMsg{&app.Result{Tab: "G|---|\n"}})
+	res := testResult(t)
+	res.Samples = nil
+	m, _ = advance(t, m, analysisDoneMsg{res})
 	m, _ = advance(t, m, keyPress('?'))
 	if !m.help.ShowAll {
 		t.Fatal("help.ShowAll = false after ?, want true")

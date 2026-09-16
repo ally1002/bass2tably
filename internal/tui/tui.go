@@ -12,7 +12,6 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"bass2tably/internal/app"
-	"bass2tably/internal/audio"
 )
 
 type screen int
@@ -96,7 +95,8 @@ type model struct {
 	res         *app.Result
 	err         error
 	w, h        int
-	player      *audio.Player
+	player      player
+	newPlayer   func(samples []float64, rate int) (player, error)
 	audioErr    error
 	tickGen     int
 	tickRunning bool
@@ -106,13 +106,14 @@ type model struct {
 
 func newModel(path string, opts app.Options) model {
 	m := model{
-		picker: newPicker([]string{".wav", ".m4a", ".mp3", ".ogg", ".flac"}),
-		spin:   spinner.New(spinner.WithSpinner(spinner.Dot)),
-		vp:     viewport.New(),
-		help:   help.New(),
-		keys:   defaultViewerKeys(),
-		opts:   opts,
-		path:   path,
+		picker:    newPicker([]string{".wav", ".m4a", ".mp3", ".ogg", ".flac"}),
+		spin:      spinner.New(spinner.WithSpinner(spinner.Dot)),
+		vp:        viewport.New(),
+		help:      help.New(),
+		keys:      defaultViewerKeys(),
+		opts:      opts,
+		path:      path,
+		newPlayer: newPlayer,
 	}
 	m.vp.KeyMap.PageDown.SetKeys("pgdown", "f")
 	if path != "" {
@@ -234,7 +235,7 @@ func (m model) updateAnalyzing(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.vp.SetXOffset(0)
 		m.closePlayer()
 		if len(msg.res.Samples) > 0 {
-			m.player, m.audioErr = audio.New(msg.res.Samples, msg.res.SampleRate)
+			m.player, m.audioErr = m.newPlayer(msg.res.Samples, msg.res.SampleRate)
 		}
 		m.curSlot = 0
 		m.curPos = 0
@@ -264,7 +265,9 @@ func (m model) updateViewer(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.curPos = m.player.PosSec()
 		if m.player.Done() {
-			m.player.Pause()
+			if err := m.player.Pause(); err != nil {
+				m.audioErr = err
+			}
 			m.tickRunning = false
 			m.syncNoteSel()
 			m.refreshCursor()
