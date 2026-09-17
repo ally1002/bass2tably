@@ -6,8 +6,18 @@ import (
 )
 
 const (
-	yinWin         = 3072
-	yinHop         = 1024
+	yinPeriods = 3.0
+	yinHopFrac = 0.25
+)
+
+func yinWindow(sampleRate int, fmin float64) (win, hop int) {
+	win = int(math.Ceil(yinPeriods * float64(sampleRate) / fmin))
+	win += win % 2
+	hop = int(float64(win) * yinHopFrac)
+	return win, hop
+}
+
+const (
 	yinFmin        = 28.0
 	yinFmax        = 450.0
 	yinThreshold   = 0.35
@@ -48,15 +58,16 @@ func yinFrames(samples []float64, sampleRate int, seg Segment) (freqs []float64,
 	if end > len(samples) {
 		end = len(samples)
 	}
+	win, hop := yinWindow(sampleRate, yinFmin)
 
-	for p := start; p+yinWin <= end; p += yinHop {
+	for p := start; p+win <= end; p += hop {
 		frames++
-		if f, ok := Yin(samples[p:p+yinWin], sampleRate, yinFmin, yinFmax, yinThreshold); ok {
+		if f, ok := Yin(samples[p:p+win], sampleRate, yinFmin, yinFmax, yinThreshold); ok {
 			freqs = append(freqs, f)
 		}
 	}
 	if len(freqs) == 0 && start < len(samples) {
-		stop := start + yinWin
+		stop := start + win
 		if stop > len(samples) {
 			stop = len(samples)
 		}
