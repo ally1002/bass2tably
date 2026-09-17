@@ -171,10 +171,10 @@ func mergeCandidates(fmin, fmax float64, lists ...[]float64) []float64 {
 	return out
 }
 
-func noteCandidates(ps []partial, frames [][]float64, sampleRate int, fmin, fmax float64) []float64 {
+func noteCandidates(ps []partial, fc [][]yinCandidate, fmin, fmax float64) []float64 {
 	var yc []float64
-	for _, fr := range frames {
-		for _, c := range yinCandidates(fr, sampleRate, fmin, fmax) {
+	for _, cs := range fc {
+		for _, c := range cs {
 			yc = append(yc, c.Hz)
 		}
 	}
