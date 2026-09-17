@@ -52,13 +52,135 @@ func TestRealRecordings(t *testing.T) {
 			}
 
 			if len(got) != len(want) {
-				t.Fatalf("got %d pitched notes, want %d\ngot: %v", len(got), len(want), got)
+				t.Errorf("got %d pitched notes, want %d", len(got), len(want))
 			}
-			for i := range want {
-				if got[i] != want[i] {
-					t.Errorf("note %d: midi %d (%s), want %d (%s)",
-						i, got[i], music.MidiName(got[i]), want[i], music.MidiName(want[i]))
+			for _, o := range diffMidi(got, want) {
+				switch o.kind {
+				case 'x':
+					t.Errorf("note %d: got %d (%s), want %d (%s)",
+						o.at, o.got, music.MidiName(o.got), o.want, music.MidiName(o.want))
+				case '-':
+					t.Errorf("note %d: missing, want %d (%s)",
+						o.at, o.want, music.MidiName(o.want))
+				case '+':
+					t.Errorf("note %d: extra %d (%s)",
+						o.at, o.got, music.MidiName(o.got))
 				}
+			}
+		})
+	}
+}
+
+type op struct {
+	kind      byte
+	got, want int
+	at        int
+}
+
+func diffMidi(got, want []int) []op {
+	n, m := len(got), len(want)
+	d := make([][]int, n+1)
+	for i := range d {
+		d[i] = make([]int, m+1)
+	}
+	for i := n - 1; i >= 0; i-- {
+		d[i][m] = n - i
+	}
+	for j := m - 1; j >= 0; j-- {
+		d[n][j] = m - j
+	}
+	for i := n - 1; i >= 0; i-- {
+		for j := m - 1; j >= 0; j-- {
+			sub := d[i+1][j+1]
+			if got[i] != want[j] {
+				sub++
+			}
+			best := sub
+			if v := d[i][j+1] + 1; v < best {
+				best = v
+			}
+			if v := d[i+1][j] + 1; v < best {
+				best = v
+			}
+			d[i][j] = best
+		}
+	}
+
+	var ops []op
+	i, j := 0, 0
+	for i < n && j < m {
+		sub := d[i+1][j+1]
+		if got[i] != want[j] {
+			sub++
+		}
+		switch {
+		case got[i] == want[j] && sub == d[i][j]:
+			ops = append(ops, op{'=', got[i], want[j], j})
+			i, j = i+1, j+1
+		case d[i][j+1]+1 == d[i][j]:
+			ops = append(ops, op{'-', -1, want[j], j})
+			j++
+		case sub == d[i][j]:
+			ops = append(ops, op{'x', got[i], want[j], j})
+			i, j = i+1, j+1
+		default:
+			ops = append(ops, op{'+', got[i], -1, j})
+			i++
+		}
+	}
+	for ; i < n; i++ {
+		ops = append(ops, op{'+', got[i], -1, m})
+	}
+	for ; j < m; j++ {
+		ops = append(ops, op{'-', -1, want[j], j})
+	}
+	return ops
+}
+
+func TestDiffMidi(t *testing.T) {
+	fmtOps := func(ops []op) string {
+		var b strings.Builder
+		for _, o := range ops {
+			if o.kind == '=' {
+				continue
+			}
+			if b.Len() > 0 {
+				b.WriteByte(' ')
+			}
+			switch o.kind {
+			case 'x':
+				b.WriteString(strconv.Itoa(o.at) + ":x" + strconv.Itoa(o.got) + "/" + strconv.Itoa(o.want))
+			case '-':
+				b.WriteString(strconv.Itoa(o.at) + ":-" + strconv.Itoa(o.want))
+			case '+':
+				b.WriteString(strconv.Itoa(o.at) + ":+" + strconv.Itoa(o.got))
+			}
+		}
+		return b.String()
+	}
+
+	cases := []struct {
+		name string
+		got  []int
+		want []int
+		ops  string
+	}{
+		{"identical", []int{28, 31, 33}, []int{28, 31, 33}, ""},
+		{"substitution", []int{28, 24, 33}, []int{28, 23, 33}, "1:x24/23"},
+		{"missing", []int{28, 33}, []int{28, 31, 33}, "1:-31"},
+		{"extra", []int{28, 31, 33}, []int{28, 33}, "1:+31"},
+		{"empty got", []int{}, []int{28, 31}, "0:-28 1:-31"},
+		{
+			"substitution after a run of missing notes",
+			[]int{31, 31, 24, 26},
+			[]int{31, 31, 31, 31, 31, 23, 26},
+			"2:-31 3:-31 4:-31 5:x24/23",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := fmtOps(diffMidi(c.got, c.want)); got != c.ops {
+				t.Errorf("diffMidi = %q, want %q", got, c.ops)
 			}
 		})
 	}
