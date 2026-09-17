@@ -35,10 +35,10 @@ func TestCorpusReport(t *testing.T) {
 func reportCorpus(t *testing.T, name string, x []float64, sr int) {
 	t.Helper()
 	t.Logf("== %s", name)
-	t.Logf("%3s %8s %6s %5s  %8s %5s %5s  %8s %2s  %6s  %s",
-		"seg", "start", "len", "rung", "yin", "frm", "cand", "spec", "h", "cents", "final")
+	t.Logf("%3s %8s %6s %5s  %8s %5s %5s  %8s %2s  %6s  %8s %6s %6s  %s",
+		"seg", "start", "len", "rung", "yin", "frm", "cand", "spec", "h", "cents", "twm", "cost", "mrg", "final")
 
-	var same, diff, unvoiced, noEst int
+	var same, diff, unvoiced, noEst, twmMoves int
 	var abs []float64
 	for i, seg := range Segments(x, sr) {
 		start := seg.Start + int(attackSkipSec*float64(sr))
@@ -93,12 +93,23 @@ func reportCorpus(t *testing.T, name string, x []float64, sr int) {
 		if fok {
 			final = fmt.Sprintf("%d %s %.2f", music.MidiFromFreq(ff), music.MidiName(music.MidiFromFreq(ff)), ff)
 		}
-		t.Logf("%3d %8.3f %6d %5d  %8s %2d/%-2d %2d/%-2d  %8s %2d  %6s  %s",
+		twm, cost, mrg := "-", "-", "-"
+		if ranked := twmRank(ps, noteCandidates(ps, frames, sr, yinFmin, yinFmax), inharmB); len(ranked) > 0 {
+			twm = fmt.Sprintf("%8.2f", ranked[0].Hz)
+			cost = fmt.Sprintf("%6.3f", ranked[0].Cost)
+			mrg = fmt.Sprintf("%6.3f", twmMargin(ranked))
+			if !fok || music.MidiFromFreq(ranked[0].Hz) != music.MidiFromFreq(ff) {
+				twmMoves++
+			}
+		} else if fok {
+			twmMoves++
+		}
+		t.Logf("%3d %8.3f %6d %5d  %8s %2d/%-2d %2d/%-2d  %8s %2d  %6s  %8s %6s %6s  %s",
 			i, float64(seg.Start)/float64(sr), seg.End-seg.Start, rung,
-			yin, len(freqs), len(frames), candP50, candMax, spec, matched, cents, final)
+			yin, len(freqs), len(frames), candP50, candMax, spec, matched, cents, twm, cost, mrg, final)
 	}
-	t.Logf("-- %s: same %d, different %d, |cents| p50/p90/max %.0f/%.0f/%.0f, unvoiced %d, no-estimate %d",
-		name, same, diff, percentile(abs, 0.5), percentile(abs, 0.9), percentile(abs, 1), unvoiced, noEst)
+	t.Logf("-- %s: same %d, different %d, |cents| p50/p90/max %.0f/%.0f/%.0f, unvoiced %d, no-estimate %d, twm!=final %d",
+		name, same, diff, percentile(abs, 0.5), percentile(abs, 0.9), percentile(abs, 1), unvoiced, noEst, twmMoves)
 }
 
 func percentile(v []float64, p float64) float64 {
