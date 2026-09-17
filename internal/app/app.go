@@ -89,12 +89,13 @@ func Analyze(path string, opts Options) (*Result, error) {
 		estimated = true
 	}
 
+	rng := dsp.RangeForTuning(open)
 	notes := make([]music.Note, 0, len(segs))
 	var skipped []Skipped
 	for i, s := range segs {
 		start := float64(s.Start) / float64(clip.SampleRate)
 		dur := float64(s.End-s.Start) / float64(clip.SampleRate)
-		freq, ok := dsp.NotePitch(clip.Samples, clip.SampleRate, s)
+		freq, ok := dsp.NotePitchIn(clip.Samples, clip.SampleRate, s, rng)
 		if !ok {
 			skipped = append(skipped, Skipped{Index: i, StartSec: start, DurSec: dur})
 			continue

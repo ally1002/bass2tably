@@ -32,6 +32,8 @@ func TestCorpusReport(t *testing.T) {
 	}
 }
 
+var beadg = RangeForTuning([]int{23, 28, 33, 38, 43})
+
 func reportCorpus(t *testing.T, name string, x []float64, sr int) {
 	t.Helper()
 	t.Logf("== %s", name)
@@ -48,22 +50,22 @@ func reportCorpus(t *testing.T, name string, x []float64, sr int) {
 		}
 		rung := specRung(len(x), start, end-start)
 
-		frames := segFrames(x, sr, seg)
-		freqs, _ := yinFrames(x, sr, seg)
+		frames := segFrames(x, sr, seg, beadg)
+		freqs, _ := yinFrames(x, sr, seg, beadg)
 		ncand := make([]int, 0, len(frames))
 		for _, fr := range frames {
-			ncand = append(ncand, len(yinCandidates(fr, sr, yinFmin, yinFmax)))
+			ncand = append(ncand, len(yinCandidates(fr, sr, beadg.MinHz, beadg.MaxHz)))
 		}
 		sort.Ints(ncand)
 		candP50, candMax := 0, 0
 		if len(ncand) > 0 {
 			candP50, candMax = ncand[len(ncand)/2], ncand[len(ncand)-1]
 		}
-		yf, yok := yinMedian(x, sr, seg)
+		yf, yok := yinMedian(x, sr, seg, beadg)
 		ps := spectralPartials(x, sr, start, end-start)
-		sf, sok := spectralF0(ps, yinFmin, yinFmax)
+		sf, sok := spectralF0(ps, beadg.MinHz, beadg.MaxHz)
 		_, matched, _ := harmonicMatch(ps, sf, 8)
-		ff, fok := NotePitch(x, sr, seg)
+		ff, fok := NotePitchIn(x, sr, seg, beadg)
 
 		yin := "-"
 		if yok {
@@ -94,7 +96,7 @@ func reportCorpus(t *testing.T, name string, x []float64, sr int) {
 			final = fmt.Sprintf("%d %s %.2f", music.MidiFromFreq(ff), music.MidiName(music.MidiFromFreq(ff)), ff)
 		}
 		twm, cost, mrg := "-", "-", "-"
-		if ranked := twmRank(ps, noteCandidates(ps, frames, sr, yinFmin, yinFmax), inharmB); len(ranked) > 0 {
+		if ranked := twmRank(ps, noteCandidates(ps, frames, sr, beadg.MinHz, beadg.MaxHz), inharmB); len(ranked) > 0 {
 			twm = fmt.Sprintf("%8.2f", ranked[0].Hz)
 			cost = fmt.Sprintf("%6.3f", ranked[0].Cost)
 			mrg = fmt.Sprintf("%6.3f", twmMargin(ranked))

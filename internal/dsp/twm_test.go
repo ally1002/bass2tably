@@ -62,7 +62,7 @@ func TestTwmStretchWidensTheOpenBMargin(t *testing.T) {
 	seg := segmentNear(Segments(x, sr), sr, 12.434)
 	start := seg.Start + int(attackSkipSec*float64(sr))
 	ps := spectralPartials(x, sr, start, seg.End-start)
-	cands := noteCandidates(ps, segFrames(x, sr, seg), sr, yinFmin, yinFmax)
+	cands := noteCandidates(ps, segFrames(x, sr, seg, DefaultRange), sr, yinFmin, yinFmax)
 
 	var margins [2]float64
 	for i, b := range []float64{0, inharmB} {

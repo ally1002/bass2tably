@@ -201,7 +201,7 @@ func TestNotePitchMissingFundamental(t *testing.T) {
 		[]float64{2 * f0, 3 * f0, 4 * f0, 5 * f0, 6 * f0, 7 * f0},
 		[]float64{0.5, 0.8, 1.0, 0.6, 0.9, 0.4})
 	seg := Segment{Start: 0, End: len(x)}
-	_, voiced := yinMedian(x, sr, seg)
+	_, voiced := yinMedian(x, sr, seg, DefaultRange)
 	f, ok := NotePitch(x, sr, seg)
 	if !ok {
 		t.Fatalf("no pitch (yin voiced: %v)", voiced)

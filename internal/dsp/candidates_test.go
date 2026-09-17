@@ -90,7 +90,7 @@ func TestYinCandidatesCarryTheOpenB(t *testing.T) {
 	const truth = 30.87
 	x, sr := clip.Samples, clip.SampleRate
 	seg := segmentNear(Segments(x, sr), sr, 12.434)
-	frames := segFrames(x, sr, seg)
+	frames := segFrames(x, sr, seg, DefaultRange)
 	if len(frames) < 5 {
 		t.Fatalf("segment at %.3f s has %d frames, want a sustained note", float64(seg.Start)/float64(sr), len(frames))
 	}
@@ -119,7 +119,7 @@ func TestYinCandidatesOnSilenceAndGaps(t *testing.T) {
 	x := clip.Samples
 	for _, sec := range []float64{3.030, 11.029, 19.029, 27.028} {
 		seg := segmentNear(Segments(x, clip.SampleRate), clip.SampleRate, sec)
-		for _, fr := range segFrames(x, clip.SampleRate, seg) {
+		for _, fr := range segFrames(x, clip.SampleRate, seg, DefaultRange) {
 			for _, c := range yinCandidates(fr, clip.SampleRate, yinFmin, yinFmax) {
 				if c.Depth < yinThreshold {
 					t.Errorf("gap at %.3f s: candidate %.2f Hz at depth %.3f would voice a rest", sec, c.Hz, c.Depth)

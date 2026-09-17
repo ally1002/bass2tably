@@ -46,9 +46,10 @@ func TestRealRecordings(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			rng := dsp.RangeForTuning(app.Tunings["BEADG"])
 			var got []int
 			for _, seg := range dsp.Segments(clip.Samples, clip.SampleRate) {
-				if freq, ok := dsp.NotePitch(clip.Samples, clip.SampleRate, seg); ok {
+				if freq, ok := dsp.NotePitchIn(clip.Samples, clip.SampleRate, seg, rng); ok {
 					got = append(got, music.MidiFromFreq(freq))
 				}
 			}
