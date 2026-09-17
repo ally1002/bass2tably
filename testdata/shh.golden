@@ -1,0 +1,99 @@
+notes: 68
+bpm: 124.5
+skipped #8 3.030s 0.081s
+skipped #25 11.029s 0.081s
+skipped #42 19.029s 0.081s
+skipped #59 27.028s 0.081s
+G|--------------------------------|--------------------------------|--------------------------------|--------------------------------|
+D|--------------------------------|--------------------------------|--------------------------------|--------------------------------|
+A|----------------0---------------|--------------------------------|------------------0-------------|------------2-------3-----------|
+E|0-------2---------------2---0---|----0-----2-------2-------------|--0-------2---------------2---0-|------0-------------------------|
+B|--------------------------------|--------------------------------|--------------------------------|--------------------------------|
+
+G|--------------------------------|--------------------------------|--------------------------------|--------------------------------|
+D|--------------------------------|--------------------------------|--------------------------------|--------------------------------|
+A|----------------------0---------|--------------------------------|----------------------0---------|----------------2---------3-----|
+E|----0-------2-----------------2-|--0-------0---2---------2-------|------0-------2---------------2-|----0-------0-------------------|
+B|--------------------------------|--------------------------------|--------------------------------|--------------------------------|
+
+G|--------------------------------|--------------------------------|--------------------------------|--------------------------------|
+D|--------------------------------|--------------------------------|--------------------------------|--------------------------------|
+A|--------------------------0-----|--------------------------------|----------------------------0---|----------------------2-------3-|
+E|----------0-------2-------------|--2---0-------0---2---------2---|------------0-------2-----------|----2---0-------0---------------|
+B|--------------------------------|--------------------------------|--------------------------------|--------------------------------|
+
+G|--------------------------------|--------------------------------|--------------------------------|--------------------------------|
+D|--------------------------------|--------------------------------|--------------------------------|--------------------------------|
+A|--------------------------------|0-------------------------------|--------------------------------|0-------------------------2-----|
+E|--------------0-------2---------|--------2-0-------0-----2-------|2---------------0-------2-------|--------2---0---------0---------|
+B|--------------------------------|--------------------------------|--------------------------------|--------------------------------|
+
+G|--------------------------------|
+D|--------------------------------|
+A|----3---------------------------|
+E|--------------------------------|
+B|--------------------------------|
+#1    0.08s  E1   string E fret 0   [also: B fret 5]             1 beat
+#2    0.55s  F#1  string E fret 2   [also: B fret 7]             3/4 beat
+#3    1.09s  A1   string A fret 0   [also: E fret 5, B fret 10]  1 beat
+#4    1.57s  F#1  string E fret 2   [also: B fret 7]             1/2 beat
+#5    1.81s  E1   string E fret 0   [also: B fret 5]             1/2 beat
+#6    2.28s  E1   string E fret 0   [also: B fret 5]             1/2 beat
+#7    2.57s  F#1  string E fret 2   [also: B fret 7]             1/2 beat
+#8    3.11s  F#1  string E fret 2   [also: B fret 7]             5/4 beat
+#9    4.04s  E1   string E fret 0   [also: B fret 5]             1 beat
+#10   4.53s  F#1  string E fret 2   [also: B fret 7]             1 beat
+#11   5.03s  A1   string A fret 0   [also: E fret 5, B fret 10]  1 beat
+#12   5.51s  F#1  string E fret 2   [also: B fret 7]             1/2 beat
+#13   5.78s  E1   string E fret 0   [also: B fret 5]             1/2 beat
+#14   6.28s  E1   string E fret 0   [also: B fret 5]             3/4 beat
+#15   6.59s  B1   string A fret 2   [also: E fret 7, B fret 12]  1/2 beat
+#16   7.12s  C2   string A fret 3   [also: E fret 8, B fret 13]  7/4 beat
+#17   8.08s  E1   string E fret 0   [also: B fret 5]             1 beat
+#18   8.54s  F#1  string E fret 2   [also: B fret 7]             3/4 beat
+#19   9.08s  A1   string A fret 0   [also: E fret 5, B fret 10]  1 beat
+#20   9.57s  F#1  string E fret 2   [also: B fret 7]             1/2 beat
+#21   9.80s  E1   string E fret 0   [also: B fret 5]             1/2 beat
+#22  10.28s  E1   string E fret 0   [also: B fret 5]             1/2 beat
+#23  10.57s  F#1  string E fret 2   [also: B fret 7]             1/2 beat
+#24  11.11s  F#1  string E fret 2   [also: B fret 7]             1 beat
+#25  12.05s  E1   string E fret 0   [also: B fret 5]             1 beat
+#26  12.53s  F#1  string E fret 2   [also: B fret 7]             1 beat
+#27  13.03s  A1   string A fret 0   [also: E fret 5, B fret 10]  1 beat
+#28  13.51s  F#1  string E fret 2   [also: B fret 7]             1/2 beat
+#29  13.78s  E1   string E fret 0   [also: B fret 5]             1/2 beat
+#30  14.27s  E1   string E fret 0   [also: B fret 5]             1/2 beat
+#31  14.59s  B1   string A fret 2   [also: E fret 7, B fret 12]  1/2 beat
+#32  15.12s  C2   string A fret 3   [also: E fret 8, B fret 13]  7/4 beat
+#33  16.08s  E1   string E fret 0   [also: B fret 5]             1 beat
+#34  16.54s  F#1  string E fret 2   [also: B fret 7]             3/4 beat
+#35  17.09s  A1   string A fret 0   [also: E fret 5, B fret 10]  1 beat
+#36  17.57s  F#1  string E fret 2   [also: B fret 7]             1/2 beat
+#37  17.80s  E1   string E fret 0   [also: B fret 5]             1/2 beat
+#38  18.28s  E1   string E fret 0   [also: B fret 5]             1/2 beat
+#39  18.57s  F#1  string E fret 2   [also: B fret 7]             1/2 beat
+#40  19.11s  F#1  string E fret 2   [also: B fret 7]             5/4 beat
+#41  20.04s  E1   string E fret 0   [also: B fret 5]             1 beat
+#42  20.53s  F#1  string E fret 2   [also: B fret 7]             1 beat
+#43  21.03s  A1   string A fret 0   [also: E fret 5, B fret 10]  1 beat
+#44  21.52s  F#1  string E fret 2   [also: B fret 7]             1/2 beat
+#45  21.78s  E1   string E fret 0   [also: B fret 5]             1/2 beat
+#46  22.27s  E1   string E fret 0   [also: B fret 5]             3/4 beat
+#47  22.59s  B1   string A fret 2   [also: E fret 7, B fret 12]  1/2 beat
+#48  23.12s  C2   string A fret 3   [also: E fret 8, B fret 13]  7/4 beat
+#49  24.08s  E1   string E fret 0   [also: B fret 5]             1 beat
+#50  24.55s  F#1  string E fret 2   [also: B fret 7]             3/4 beat
+#51  25.09s  A1   string A fret 0   [also: E fret 5, B fret 10]  1 beat
+#52  25.57s  F#1  string E fret 2   [also: B fret 7]             1/4 beat
+#53  25.80s  E1   string E fret 0   [also: B fret 5]             1/2 beat
+#54  26.28s  E1   string E fret 0   [also: B fret 5]             1/2 beat
+#55  26.57s  F#1  string E fret 2   [also: B fret 7]             1/2 beat
+#56  27.11s  F#1  string E fret 2   [also: B fret 7]             1 beat
+#57  28.04s  E1   string E fret 0   [also: B fret 5]             1 beat
+#58  28.53s  F#1  string E fret 2   [also: B fret 7]             1 beat
+#59  29.03s  A1   string A fret 0   [also: E fret 5, B fret 10]  1 beat
+#60  29.52s  F#1  string E fret 2   [also: B fret 7]             1/2 beat
+#61  29.78s  E1   string E fret 0   [also: B fret 5]             1/2 beat
+#62  30.27s  E1   string E fret 0   [also: B fret 5]             1/2 beat
+#63  30.60s  B1   string A fret 2   [also: E fret 7, B fret 12]  1/2 beat
+#64  31.11s  C2   string A fret 3   [also: E fret 8, B fret 13]  7/4 beat

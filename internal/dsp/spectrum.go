@@ -23,15 +23,23 @@ func spectralPartials(x []float64, sampleRate, start, length int) []partial {
 	return spectralPartialsRel(x, sampleRate, start, length, specPeakRel)
 }
 
-func spectralPartialsRel(x []float64, sampleRate, start, length int, rel float64) []partial {
+func specRung(avail, start, length int) int {
 	if start < 0 || length <= 0 {
-		return nil
+		return 0
 	}
 	n := specWin
-	for n > specWinMin && (length < n || start+n > len(x)) {
+	for n > specWinMin && (length < n || start+n > avail) {
 		n >>= 1
 	}
-	if length < n || start+n > len(x) {
+	if length < n || start+n > avail {
+		return 0
+	}
+	return n
+}
+
+func spectralPartialsRel(x []float64, sampleRate, start, length int, rel float64) []partial {
+	n := specRung(len(x), start, length)
+	if n == 0 {
 		return nil
 	}
 

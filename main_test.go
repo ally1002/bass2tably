@@ -1,12 +1,14 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 
+	"bass2tably/internal/app"
 	"bass2tably/internal/dsp"
 	"bass2tably/internal/music"
 	"bass2tably/internal/wavio"
@@ -183,5 +185,78 @@ func TestDiffMidi(t *testing.T) {
 				t.Errorf("diffMidi = %q, want %q", got, c.ops)
 			}
 		})
+	}
+}
+
+func renderResult(res *app.Result) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "notes: %d\n", len(res.Notes)+len(res.Skipped))
+	fmt.Fprintf(&b, "bpm: %.1f\n", res.BPM)
+	for _, s := range res.Skipped {
+		fmt.Fprintf(&b, "skipped #%d %.3fs %.3fs\n", s.Index+1, s.StartSec, s.DurSec)
+	}
+	b.WriteString(res.Tab)
+	for _, line := range res.NoteLines() {
+		b.WriteString(line)
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
+func TestGoldenShh(t *testing.T) {
+	res, err := app.Analyze(filepath.Join("testdata", "shh.wav"), app.Options{Tuning: "BEADG", Grid: 16})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := renderResult(res)
+	want, err := os.ReadFile(filepath.Join("testdata", "shh.golden"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != string(want) {
+		t.Errorf("shh output differs from testdata/shh.golden:\n%s", unifiedDiff(string(want), got))
+	}
+}
+
+func unifiedDiff(want, got string) string {
+	ids := map[string]int{}
+	var lines []string
+	intern := func(s string) []int {
+		var out []int
+		for _, l := range strings.Split(strings.TrimSuffix(s, "\n"), "\n") {
+			id, ok := ids[l]
+			if !ok {
+				id = len(lines)
+				ids[l] = id
+				lines = append(lines, l)
+			}
+			out = append(out, id)
+		}
+		return out
+	}
+	w, g := intern(want), intern(got)
+
+	var b strings.Builder
+	for _, o := range diffMidi(g, w) {
+		switch o.kind {
+		case '=':
+			fmt.Fprintf(&b, "      %s\n", lines[o.want])
+		case '-':
+			fmt.Fprintf(&b, "-%-4d %s\n", o.at+1, lines[o.want])
+		case '+':
+			fmt.Fprintf(&b, "+%-4d %s\n", o.at+1, lines[o.got])
+		case 'x':
+			fmt.Fprintf(&b, "-%-4d %s\n", o.at+1, lines[o.want])
+			fmt.Fprintf(&b, "+%-4d %s\n", o.at+1, lines[o.got])
+		}
+	}
+	return b.String()
+}
+
+func TestUnifiedDiff(t *testing.T) {
+	got := unifiedDiff("a\nb\nc\n", "a\nx\nc\nd\n")
+	want := "      a\n-2    b\n+2    x\n      c\n+4    d\n"
+	if got != want {
+		t.Errorf("unifiedDiff =\n%s\nwant\n%s", got, want)
 	}
 }
