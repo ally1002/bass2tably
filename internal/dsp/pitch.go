@@ -52,7 +52,7 @@ func notePitch(samples []float64, sampleRate int, seg Segment, cents, subRatio f
 	return f, true
 }
 
-func yinFrames(samples []float64, sampleRate int, seg Segment) (freqs []float64, frames int) {
+func segFrames(samples []float64, sampleRate int, seg Segment) [][]float64 {
 	start := seg.Start + int(attackSkipSec*float64(sampleRate))
 	end := seg.End
 	if end > len(samples) {
@@ -60,23 +60,28 @@ func yinFrames(samples []float64, sampleRate int, seg Segment) (freqs []float64,
 	}
 	win, hop := yinWindow(sampleRate, yinFmin)
 
+	var frames [][]float64
 	for p := start; p+win <= end; p += hop {
-		frames++
-		if f, ok := Yin(samples[p:p+win], sampleRate, yinFmin, yinFmax, yinThreshold); ok {
-			freqs = append(freqs, f)
-		}
+		frames = append(frames, samples[p:p+win])
 	}
-	if len(freqs) == 0 && start < len(samples) {
+	if len(frames) == 0 && start < len(samples) {
 		stop := start + win
 		if stop > len(samples) {
 			stop = len(samples)
 		}
-		frames++
-		if f, ok := Yin(samples[start:stop], sampleRate, yinFmin, yinFmax, yinThreshold); ok {
+		frames = append(frames, samples[start:stop])
+	}
+	return frames
+}
+
+func yinFrames(samples []float64, sampleRate int, seg Segment) (freqs []float64, frames int) {
+	fs := segFrames(samples, sampleRate, seg)
+	for _, fr := range fs {
+		if f, ok := Yin(fr, sampleRate, yinFmin, yinFmax, yinThreshold); ok {
 			freqs = append(freqs, f)
 		}
 	}
-	return freqs, frames
+	return freqs, len(fs)
 }
 
 func yinMedian(samples []float64, sampleRate int, seg Segment) (float64, bool) {

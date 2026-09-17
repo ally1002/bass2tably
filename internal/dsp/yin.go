@@ -2,10 +2,41 @@ package dsp
 
 import "math"
 
+type yinCandidate struct {
+	Hz    float64
+	Depth float64
+}
+
+const yinCeiling = 0.70
+
 func Yin(frame []float64, sampleRate int, fmin, fmax, threshold float64) (float64, bool) {
+	for _, c := range yinCandidates(frame, sampleRate, fmin, fmax) {
+		if c.Depth < threshold {
+			return c.Hz, true
+		}
+	}
+	return 0, false
+}
+
+func yinCandidates(frame []float64, sampleRate int, fmin, fmax float64) []yinCandidate {
+	cmnd, tauMin, tauMax := cmndf(frame, sampleRate, fmin, fmax)
+	if cmnd == nil {
+		return nil
+	}
+	var out []yinCandidate
+	for tau := tauMin; tau <= tauMax; tau++ {
+		if cmnd[tau] >= yinCeiling || cmnd[tau] >= cmnd[tau-1] || cmnd[tau] > cmnd[tau+1] {
+			continue
+		}
+		out = append(out, yinCandidate{Hz: float64(sampleRate) / refineTau(cmnd, tau), Depth: cmnd[tau]})
+	}
+	return out
+}
+
+func cmndf(frame []float64, sampleRate int, fmin, fmax float64) (cmnd []float64, tauMin, tauMax int) {
 	w := len(frame) / 2
-	tauMin := int(float64(sampleRate) / fmax)
-	tauMax := int(math.Ceil(float64(sampleRate) / fmin))
+	tauMin = int(float64(sampleRate) / fmax)
+	tauMax = int(math.Ceil(float64(sampleRate) / fmin))
 	if tauMax > w-1 {
 		tauMax = w - 1
 	}
@@ -13,11 +44,12 @@ func Yin(frame []float64, sampleRate int, fmin, fmax, threshold float64) (float6
 		tauMin = 2
 	}
 	if tauMin >= tauMax {
-		return 0, false
+		return nil, 0, 0
 	}
 
-	diff := make([]float64, tauMax+1)
-	for tau := 1; tau <= tauMax; tau++ {
+	n := tauMax + 1
+	diff := make([]float64, n+1)
+	for tau := 1; tau <= n; tau++ {
 		var sum float64
 		for i := 0; i < w; i++ {
 			d := frame[i] - frame[i+tau]
@@ -26,10 +58,10 @@ func Yin(frame []float64, sampleRate int, fmin, fmax, threshold float64) (float6
 		diff[tau] = sum
 	}
 
-	cmnd := make([]float64, tauMax+1)
+	cmnd = make([]float64, n+1)
 	cmnd[0] = 1
 	var running float64
-	for tau := 1; tau <= tauMax; tau++ {
+	for tau := 1; tau <= n; tau++ {
 		running += diff[tau]
 		if running == 0 {
 			cmnd[tau] = 1
@@ -37,16 +69,7 @@ func Yin(frame []float64, sampleRate int, fmin, fmax, threshold float64) (float6
 			cmnd[tau] = diff[tau] * float64(tau) / running
 		}
 	}
-
-	for tau := tauMin; tau <= tauMax; tau++ {
-		if cmnd[tau] < threshold {
-			for tau+1 <= tauMax && cmnd[tau+1] < cmnd[tau] {
-				tau++
-			}
-			return float64(sampleRate) / refineTau(cmnd, tau), true
-		}
-	}
-	return 0, false
+	return cmnd, tauMin, tauMax
 }
 
 func refineTau(cmnd []float64, tau int) float64 {

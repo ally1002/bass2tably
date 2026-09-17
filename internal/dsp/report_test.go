@@ -35,8 +35,8 @@ func TestCorpusReport(t *testing.T) {
 func reportCorpus(t *testing.T, name string, x []float64, sr int) {
 	t.Helper()
 	t.Logf("== %s", name)
-	t.Logf("%3s %8s %6s %5s  %8s %5s  %8s %2s  %6s  %s",
-		"seg", "start", "len", "rung", "yin", "frm", "spec", "h", "cents", "final")
+	t.Logf("%3s %8s %6s %5s  %8s %5s %5s  %8s %2s  %6s  %s",
+		"seg", "start", "len", "rung", "yin", "frm", "cand", "spec", "h", "cents", "final")
 
 	var same, diff, unvoiced, noEst int
 	var abs []float64
@@ -48,7 +48,17 @@ func reportCorpus(t *testing.T, name string, x []float64, sr int) {
 		}
 		rung := specRung(len(x), start, end-start)
 
-		freqs, frames := yinFrames(x, sr, seg)
+		frames := segFrames(x, sr, seg)
+		freqs, _ := yinFrames(x, sr, seg)
+		ncand := make([]int, 0, len(frames))
+		for _, fr := range frames {
+			ncand = append(ncand, len(yinCandidates(fr, sr, yinFmin, yinFmax)))
+		}
+		sort.Ints(ncand)
+		candP50, candMax := 0, 0
+		if len(ncand) > 0 {
+			candP50, candMax = ncand[len(ncand)/2], ncand[len(ncand)-1]
+		}
 		yf, yok := yinMedian(x, sr, seg)
 		ps := spectralPartials(x, sr, start, end-start)
 		sf, sok := spectralF0(ps, yinFmin, yinFmax)
@@ -83,9 +93,9 @@ func reportCorpus(t *testing.T, name string, x []float64, sr int) {
 		if fok {
 			final = fmt.Sprintf("%d %s %.2f", music.MidiFromFreq(ff), music.MidiName(music.MidiFromFreq(ff)), ff)
 		}
-		t.Logf("%3d %8.3f %6d %5d  %8s %2d/%-2d  %8s %2d  %6s  %s",
+		t.Logf("%3d %8.3f %6d %5d  %8s %2d/%-2d %2d/%-2d  %8s %2d  %6s  %s",
 			i, float64(seg.Start)/float64(sr), seg.End-seg.Start, rung,
-			yin, len(freqs), frames, spec, matched, cents, final)
+			yin, len(freqs), len(frames), candP50, candMax, spec, matched, cents, final)
 	}
 	t.Logf("-- %s: same %d, different %d, |cents| p50/p90/max %.0f/%.0f/%.0f, unvoiced %d, no-estimate %d",
 		name, same, diff, percentile(abs, 0.5), percentile(abs, 0.9), percentile(abs, 1), unvoiced, noEst)
