@@ -193,3 +193,28 @@ func TestSpectralF0PrefersSupportOverLoudness(t *testing.T) {
 		t.Errorf("spectralF0 = %.2f Hz (%.0f cents off 46.6), the loud four-harmonic candidate won", f, cents)
 	}
 }
+
+func TestNotePitchMissingFundamental(t *testing.T) {
+	const sr = 44100
+	const f0 = 30.87
+	x := sines(sr, sr/2,
+		[]float64{2 * f0, 3 * f0, 4 * f0, 5 * f0, 6 * f0, 7 * f0},
+		[]float64{0.5, 0.8, 1.0, 0.6, 0.9, 0.4})
+	seg := Segment{Start: 0, End: len(x)}
+	_, voiced := yinMedian(x, sr, seg)
+	f, ok := NotePitch(x, sr, seg)
+	if !ok {
+		t.Fatalf("no pitch (yin voiced: %v)", voiced)
+	}
+	if cents := 1200 * math.Log2(f/f0); math.Abs(cents) > 40 {
+		t.Errorf("NotePitch = %.2f Hz (%.0f cents off %.2f, yin voiced: %v)", f, cents, f0, voiced)
+	}
+}
+
+func TestNotePitchSilenceStaysUnpitched(t *testing.T) {
+	const sr = 44100
+	x := make([]float64, 3584)
+	if f, ok := NotePitch(x, sr, Segment{Start: 0, End: len(x)}); ok {
+		t.Errorf("silence returned %.2f Hz", f)
+	}
+}

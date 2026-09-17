@@ -20,10 +20,7 @@ func NotePitch(samples []float64, sampleRate int, seg Segment) (float64, bool) {
 }
 
 func notePitch(samples []float64, sampleRate int, seg Segment, cents, subRatio float64) (float64, bool) {
-	f, ok := yinMedian(samples, sampleRate, seg)
-	if !ok {
-		return 0, false
-	}
+	f, yok := yinMedian(samples, sampleRate, seg)
 	start := seg.Start + int(attackSkipSec*float64(sampleRate))
 	end := seg.End
 	if end > len(samples) {
@@ -31,7 +28,12 @@ func notePitch(samples []float64, sampleRate int, seg Segment, cents, subRatio f
 	}
 	ps := spectralPartials(samples, sampleRate, start, end-start)
 	sf, sok := spectralF0Ratio(ps, yinFmin, yinFmax, subRatio)
-	if !sok {
+	switch {
+	case !yok && !sok:
+		return 0, false
+	case !yok:
+		return sf, true
+	case !sok:
 		return f, true
 	}
 	if math.Abs(1200*math.Log2(sf/f)) > cents {

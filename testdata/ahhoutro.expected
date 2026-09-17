@@ -1,0 +1,11 @@
+# Ground truth for ahhoutro.wav (final phrase of ahh.wav, cut at 37.02 s).
+# The player supplied the tab for this phrase directly:
+#   E|3-3-----------------------------|
+#   B|-------0--3---------------------|
+# Derived from that transcription, NOT from bass2tably's output. The cut
+# point sits between the aubioonset -B 2048 -H 256 attacks at 36.952 and
+# 37.089 s, re-encoded with -c:a pcm_s16le (R17).
+# The B0 is the case this fixture exists for: YIN declines to voice it and
+# the spectrum reads it from partials 2-7 (see PLAN.md E11).
+# Do NOT regenerate this file from our output (see PLAN.md E4).
+31 31 23 26
