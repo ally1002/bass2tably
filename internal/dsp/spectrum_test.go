@@ -178,3 +178,18 @@ func TestSpectralF0TooFewPartials(t *testing.T) {
 		t.Error("partials with no harmonic in range returned an estimate")
 	}
 }
+
+func TestSpectralF0PrefersSupportOverLoudness(t *testing.T) {
+	ps := []partial{
+		{93.27, 1.00}, {143.81, 0.91}, {187.66, 1.59}, {234.29, 1.28},
+		{280.58, 0.60}, {328.97, 1.48}, {376.48, 3.79}, {424.52, 4.91},
+		{470.17, 2.33}, {494.30, 0.78},
+	}
+	f, ok := spectralF0(ps, yinFmin, yinFmax)
+	if !ok {
+		t.Fatal("no estimate")
+	}
+	if cents := 1200 * math.Log2(f/46.6); math.Abs(cents) > 40 {
+		t.Errorf("spectralF0 = %.2f Hz (%.0f cents off 46.6), the loud four-harmonic candidate won", f, cents)
+	}
+}

@@ -134,6 +134,10 @@ func oddHarmonicsPresent(ps []partial, sub float64, div int) bool {
 }
 
 func spectralF0(ps []partial, fmin, fmax float64) (float64, bool) {
+	return spectralF0Ratio(ps, fmin, fmax, specSubRatio)
+}
+
+func spectralF0Ratio(ps []partial, fmin, fmax, subRatio float64) (float64, bool) {
 	if len(ps) < 3 {
 		return 0, false
 	}
@@ -144,7 +148,10 @@ func spectralF0(ps []partial, fmin, fmax float64) (float64, bool) {
 			break
 		}
 		s, matched, refined := harmonicMatch(ps, f, 8)
-		if s > 0 && s >= bestScore {
+		if s <= 0 {
+			continue
+		}
+		if matched > bestMatched || (matched == bestMatched && s >= bestScore) {
 			best, bestScore, bestMatched = refined, s, matched
 		}
 	}
@@ -159,7 +166,7 @@ func spectralF0(ps []partial, fmin, fmax float64) (float64, bool) {
 		if !oddHarmonicsPresent(ps, sub, div) {
 			continue
 		}
-		if s, _, refined := harmonicMatch(ps, sub, 8); s >= specSubRatio*bestScore {
+		if s, _, refined := harmonicMatch(ps, sub, 8); s >= subRatio*bestScore {
 			best = refined
 		}
 	}
