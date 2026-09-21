@@ -25,38 +25,67 @@ func cursorFixtureNotesFrets() ([]music.Note, []tab.Fretting) {
 	return notes, frets
 }
 
-func TestHighlightColumnStripsBackToPlain(t *testing.T) {
+func testStyles() styles { return newStyles(themes[0], true) }
+
+func TestRenderTabStripsBackToPlain(t *testing.T) {
 	notes, frets := cursorFixtureNotesFrets()
 	res := newResult(t, notes, frets, 100, 4, 0)
+	st := testStyles()
 	for _, n := range res.Notes {
 		block, col := res.Layout.SlotCell(n.Slot)
-		got := ansi.Strip(highlightColumn(res.Tab, res.Layout, block, col, cursorStyle))
+		got := ansi.Strip(renderTab(res.Tab, res.Layout, st, block, col))
 		if got != res.Tab {
-			t.Fatalf("slot %d: stripped highlight differs from plain render", n.Slot)
+			t.Fatalf("slot %d: stripped render differs from plain tab", n.Slot)
+		}
+	}
+	if got := ansi.Strip(renderTab(res.Tab, res.Layout, st, -1, -1)); got != res.Tab {
+		t.Fatal("stripped render without cursor differs from plain tab")
+	}
+}
+
+func TestRenderTabStylesOnlyCursorBlock(t *testing.T) {
+	notes, frets := cursorFixtureNotesFrets()
+	res := newResult(t, notes, frets, 100, 4, 0)
+	st := testStyles()
+	plain := strings.Split(res.Tab, "\n")
+	for i, n := range res.Notes[1:] {
+		block, col := res.Layout.SlotCell(n.Slot)
+		start := block * (res.Layout.Rows + 1)
+		fretRow := start + res.Layout.Rows - 1 - frets[i+1].String
+		cursorCell := st.cursor.Render(plain[fretRow][col : col+res.Layout.CellW])
+		out := strings.Split(renderTab(res.Tab, res.Layout, st, block, col), "\n")
+		hits := 0
+		for r, line := range out {
+			has := strings.Contains(line, cursorCell)
+			inBlock := r >= start && r < start+res.Layout.Rows
+			if has && !inBlock {
+				t.Errorf("slot %d row %d: cursor style outside the cursor block", n.Slot, r)
+			}
+			if has {
+				hits++
+			}
+		}
+		if hits != 1 {
+			t.Errorf("slot %d: fret cell styled as cursor on %d rows, want 1", n.Slot, hits)
 		}
 	}
 }
 
-func TestHighlightColumnStylesExactCell(t *testing.T) {
+func TestFitMeasures(t *testing.T) {
 	notes, frets := cursorFixtureNotesFrets()
 	res := newResult(t, notes, frets, 100, 4, 0)
-	plain := strings.Split(res.Tab, "\n")
-	for _, n := range res.Notes {
-		block, col := res.Layout.SlotCell(n.Slot)
-		out := strings.Split(highlightColumn(res.Tab, res.Layout, block, col, cursorStyle), "\n")
-		if len(out) != len(plain) {
-			t.Fatalf("slot %d: line count changed", n.Slot)
-		}
-		start := block * (res.Layout.Rows + 1)
-		for r := range plain {
-			if r >= start && r < start+res.Layout.Rows {
-				want := plain[r][:col] + cursorStyle.Render(plain[r][col:col+res.Layout.CellW]) + plain[r][col+res.Layout.CellW:]
-				if out[r] != want {
-					t.Errorf("slot %d row %d: styled line mismatch", n.Slot, r)
-				}
-			} else if out[r] != plain[r] {
-				t.Errorf("slot %d row %d: line outside block was modified", n.Slot, r)
-			}
+	l := res.Layout
+	mw := l.SlotsPerMeasure*l.CellW + 1
+	cases := map[int]int{
+		0:                      1,
+		l.NameW + 1 + mw:       1,
+		l.NameW + 1 + 2*mw:     2,
+		l.NameW + 1 + 2*mw + 5: 2,
+		l.NameW + 1 + 100*mw:   l.Measures,
+	}
+	for w, want := range cases {
+		if got := fitMeasures(w, l); got != want {
+			t.Errorf("fitMeasures(%d) = %d, want %d", w, got, want)
 		}
 	}
 }

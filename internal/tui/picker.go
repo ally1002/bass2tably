@@ -9,11 +9,13 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 type pickEntry struct {
 	name  string
 	isDir bool
+	size  int64
 }
 
 type dirReadMsg struct {
@@ -31,15 +33,11 @@ type picker struct {
 	sel     int
 	offset  int
 	height  int
+	width   int
 }
 
-var (
-	pickDirStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("99"))
-	pickCursorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
-)
-
 func newPicker(exts []string) picker {
-	return picker{dir: ".", exts: exts, height: 10}
+	return picker{dir: ".", exts: exts, height: 10, width: 80}
 }
 
 func (p picker) Init() tea.Cmd {
@@ -59,15 +57,18 @@ func readDirCmd(dir string, exts []string) tea.Cmd {
 				continue
 			}
 			isDir := de.IsDir()
-			if de.Type()&os.ModeSymlink != 0 {
-				if fi, err := os.Stat(filepath.Join(dir, name)); err == nil {
-					isDir = fi.IsDir()
-				}
+			var size int64
+			fi, statErr := os.Stat(filepath.Join(dir, name))
+			if de.Type()&os.ModeSymlink != 0 && statErr == nil {
+				isDir = fi.IsDir()
 			}
 			if !isDir && !extAllowed(name, exts) {
 				continue
 			}
-			entries = append(entries, pickEntry{name: name, isDir: isDir})
+			if !isDir && statErr == nil {
+				size = fi.Size()
+			}
+			entries = append(entries, pickEntry{name: name, isDir: isDir, size: size})
 		}
 		sort.Slice(entries, func(i, j int) bool {
 			if entries[i].isDir != entries[j].isDir {
@@ -109,12 +110,29 @@ func (p picker) Update(msg tea.Msg) (picker, tea.Cmd) {
 			if p.sel < len(p.entries)-1 {
 				p.sel++
 			}
+		case "pgup", "ctrl+u":
+			p.sel -= p.height
+			if p.sel < 0 {
+				p.sel = 0
+			}
+		case "pgdown", "ctrl+d":
+			p.sel += p.height
+			if p.sel > len(p.entries)-1 {
+				p.sel = len(p.entries) - 1
+			}
+			if p.sel < 0 {
+				p.sel = 0
+			}
 		case "g", "home":
 			p.sel = 0
 		case "G", "end":
 			p.sel = len(p.entries) - 1
 			if p.sel < 0 {
 				p.sel = 0
+			}
+		case "~":
+			if home, err := os.UserHomeDir(); err == nil {
+				return p, readDirCmd(home, p.exts)
 			}
 		case "left", "h", "backspace", "esc":
 			return p, readDirCmd(filepath.Join(p.dir, ".."), p.exts)
@@ -143,19 +161,66 @@ func (p *picker) scrollIntoView() {
 	}
 }
 
-func (p *picker) setHeight(h int) {
+func (p *picker) setSize(w, h int) {
 	if h < 1 {
 		h = 1
 	}
+	if w < 1 {
+		w = 1
+	}
 	p.height = h
+	p.width = w
 	p.scrollIntoView()
 }
 
-func (p picker) View() string {
+func (p picker) breadcrumb(st styles) string {
+	abs, err := filepath.Abs(p.dir)
+	if err != nil {
+		abs = p.dir
+	}
+	if home, err := os.UserHomeDir(); err == nil && strings.HasPrefix(abs, home) {
+		abs = "~" + strings.TrimPrefix(abs, home)
+	}
+	parent, last := filepath.Split(abs)
+	if last == "" {
+		return st.accent.Bold(true).Render(abs)
+	}
+	sep := st.frame.Render(" ▸ ")
+	crumbs := strings.Split(strings.Trim(parent, string(filepath.Separator)), string(filepath.Separator))
+	var parts []string
+	if strings.HasPrefix(parent, string(filepath.Separator)) {
+		parts = append(parts, st.muted.Render("/"))
+	}
+	for _, c := range crumbs {
+		if c != "" {
+			parts = append(parts, st.muted.Render(c))
+		}
+	}
+	parts = append(parts, st.accent.Bold(true).Render(last))
+	return ansi.TruncateLeft(strings.Join(parts, sep), max(0, lipgloss.Width(strings.Join(parts, sep))-p.width+1), "…")
+}
+
+func humanSize(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	units := "KMGT"
+	v := float64(n)
+	i := -1
+	for v >= unit && i < len(units)-1 {
+		v /= unit
+		i++
+	}
+	return fmt.Sprintf("%.1f %cB", v, units[i])
+}
+
+func (p picker) View(st styles) string {
 	var b strings.Builder
-	b.WriteString(dimStyle.Render(p.dir) + "\n")
 	if len(p.entries) == 0 {
-		b.WriteString(dimStyle.Render("  (no audio files here — h to go up)"))
+		b.WriteString(st.muted.Render("  no audio files here"))
+		b.WriteString("\n")
+		b.WriteString(st.faint.Render("  h goes up a level · ~ jumps home"))
 		return b.String()
 	}
 	end := p.offset + p.height
@@ -164,15 +229,39 @@ func (p picker) View() string {
 	}
 	for i := p.offset; i < end; i++ {
 		e := p.entries[i]
-		cursor := "  "
-		if i == p.sel {
-			cursor = pickCursorStyle.Render("> ")
+		selected := i == p.sel
+		bg := func(s lipgloss.Style) lipgloss.Style {
+			if selected {
+				return s.Background(st.pal.selBg)
+			}
+			return s
 		}
-		name := e.name
+		mark := "  "
+		if selected {
+			mark = st.selMark.Render("▌ ")
+		}
+		var name, meta string
 		if e.isDir {
-			name = pickDirStyle.Render(name + "/")
+			name = bg(st.pickDir).Render("▸ " + e.name + "/")
+		} else {
+			name = bg(st.pickFile).Render("♪ " + e.name)
+			meta = bg(st.muted).Render(humanSize(e.size))
 		}
-		fmt.Fprintf(&b, "%s%s\n", cursor, name)
+		metaW := ansi.StringWidth(meta)
+		nameMax := p.width - 2 - metaW - 3
+		if nameMax < 4 {
+			nameMax = 4
+		}
+		name = ansi.Truncate(name, nameMax, "…")
+		gap := p.width - 2 - ansi.StringWidth(name) - metaW - 1
+		if gap < 1 {
+			gap = 1
+		}
+		line := mark + name + bg(lipgloss.NewStyle()).Render(strings.Repeat(" ", gap)) + meta + bg(lipgloss.NewStyle()).Render(" ")
+		b.WriteString(line)
+		if i < end-1 {
+			b.WriteString("\n")
+		}
 	}
-	return strings.TrimRight(b.String(), "\n")
+	return b.String()
 }

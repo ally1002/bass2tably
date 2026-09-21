@@ -20,6 +20,7 @@ bass2tably --bpm 90 riff.wav      # print the tab and note list and exit
 | `--position` | `0` | bias fret assignment toward this neck position |
 | `--out` | (none) | write a MIDI file to this path; no MIDI is written if omitted |
 | `--tui` | off | open the TUI for the given file |
+| `--theme` | `amber` | TUI colour theme: `amber`, `neon` or `ink` |
 
 Input can be WAV, or any format `ffmpeg` reads (`.m4a`, `.mp3`, `.ogg`, `.flac`).
 
@@ -27,22 +28,33 @@ Output: an ASCII tab (16 slots per measure, 4 measures per line) and a per-note 
 (`#1    0.02s  A1   string A fret 0   [also: E fret 5, B fret 10]  1/2 beat`).
 With `--out`, also a `.mid` file (960 TPQN, GM Electric Bass finger).
 
-## TUI keys
+## TUI
+
+The viewer colours each string, marks the playback position as a column through the tab, and keeps a transport bar (time, progress, measure and beat) under the header. Three themes ship, each with a light and a dark variant chosen from the terminal background: `amber` (warm, tube-amp glow), `neon` (one colour per string, like coated string sets) and `ink` (monochrome). Pick one with `--theme` or cycle with `t`.
+
+The layout adapts: measures per line fit the terminal width by default and can be forced with `[` and `]`; the note list docks at the bottom or on the right and can be resized.
 
 | Key | Action |
 |---|---|
 | `space` | play / pause |
 | `shift+←` `shift+→` or `,` `.` | seek one measure back / forward |
 | `n` | toggle the note list panel |
+| `N` | dock the note list at the bottom or on the right |
+| `+` `-` | grow / shrink the note list |
 | `↑/↓` `j/k` | scroll the tab; with the note panel open, move the note selection (and seek there) |
 | `enter` | play from the selected note |
 | `←/→` `h/l` | scroll the tab horizontally |
 | `g` `G` | jump to top / bottom |
+| `[` `]` | fewer / more measures per line |
+| `0` | fit measures per line to the terminal width again |
+| `t` | next theme |
 | `?` | expand the help footer |
 | `esc` | back to the file picker |
 | `q` | quit |
 
-The tab scrolls itself to keep the playback cursor visible while playing; scrolling by hand while paused is never overridden. If no audio device is available the tab still opens, with a notice that playback is disabled.
+In the file picker, `~` jumps to the home directory and `h` goes up one level.
+
+The tab scrolls itself to keep the playback cursor visible while playing; scrolling by hand while paused is never overridden. If no audio device is available the tab still opens, with a notice in the transport bar that playback is disabled.
 
 ## Recording guidelines
 

@@ -135,9 +135,17 @@ func Render(notes []music.Note, frets []Fretting, tuning []int, gridDiv int) str
 	return s
 }
 
+const DefaultMeasuresPerLine = 4
+
 func RenderLayout(notes []music.Note, frets []Fretting, tuning []int, gridDiv int) (string, Layout) {
+	return RenderLayoutWidth(notes, frets, tuning, gridDiv, DefaultMeasuresPerLine)
+}
+
+func RenderLayoutWidth(notes []music.Note, frets []Fretting, tuning []int, gridDiv, measuresPerLine int) (string, Layout) {
+	if measuresPerLine < 1 {
+		measuresPerLine = 1
+	}
 	slotsPerMeasure := gridDiv * 4
-	const measuresPerLine = 4
 
 	totalSlots := slotsPerMeasure
 	for i, n := range notes {

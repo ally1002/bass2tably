@@ -25,7 +25,7 @@ func TestNotePanelTogglesAndShrinksViewport(t *testing.T) {
 		t.Fatal("note panel should start closed")
 	}
 	closedH := m.vp.Height()
-	if got := len(m.notes.lines); got != 4 {
+	if got := len(m.notes.rows); got != 4 {
 		t.Fatalf("panel has %d lines, want 4", got)
 	}
 	if ansi.Strip(m.viewerView()) == "" {
@@ -96,7 +96,7 @@ func TestNoteSelectionClampsAtEnds(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		m, _ = advance(t, m, keyPress('j'))
 	}
-	if want := len(m.notes.lines) - 1; m.notes.sel != want {
+	if want := len(m.notes.rows) - 1; m.notes.sel != want {
 		t.Errorf("selection = %d after running past the end, want %d", m.notes.sel, want)
 	}
 	if m.curPos != 1.8 {
