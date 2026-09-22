@@ -3,8 +3,6 @@ package tab
 import (
 	"math"
 	"sort"
-	"strconv"
-	"strings"
 
 	"bass2tably/internal/music"
 )
@@ -118,9 +116,16 @@ type Layout struct {
 	MeasuresPerLine int
 	Measures        int
 	Rows            int
+	Top, Bottom     int
 }
 
-// Block = index of the 5-row line group; Col = byte column inside each row.
+func (l Layout) Stride() int { return l.Top + l.Rows + l.Bottom + 1 }
+
+func (l Layout) StringRow(block, s int) int {
+	return block*l.Stride() + l.Top + l.Rows - 1 - s
+}
+
+// Block = index of the line group; Col = byte column inside each row.
 func (l Layout) SlotCell(slot int) (block, col int) {
 	m := slot / l.SlotsPerMeasure
 	block = m / l.MeasuresPerLine
@@ -142,87 +147,31 @@ func RenderLayout(notes []music.Note, frets []Fretting, tuning []int, gridDiv in
 }
 
 func RenderLayoutWidth(notes []music.Note, frets []Fretting, tuning []int, gridDiv, measuresPerLine int) (string, Layout) {
-	if measuresPerLine < 1 {
-		measuresPerLine = 1
-	}
-	slotsPerMeasure := gridDiv * 4
+	sh := Build(notes, frets, tuning, gridDiv, measuresPerLine, 2)
+	return sh.Text(ASCII), sh.Layout()
+}
 
-	totalSlots := slotsPerMeasure
-	for i, n := range notes {
-		if i >= len(frets) || frets[i].String < 0 {
-			continue
-		}
-		if n.Slot+1 > totalSlots {
-			totalSlots = n.Slot + 1
-		}
+func (l Layout) SlotAt(line, col int) (int, bool) {
+	stride := l.Stride()
+	if line < 0 || stride < 1 {
+		return 0, false
 	}
-	measures := (totalSlots + slotsPerMeasure - 1) / slotsPerMeasure
-
-	cells := make([][]int, len(tuning))
-	for s := range cells {
-		cells[s] = make([]int, measures*slotsPerMeasure)
-		for k := range cells[s] {
-			cells[s][k] = -1
-		}
+	block, r := line/stride, line%stride
+	if r < l.Top || r >= l.Top+l.Rows {
+		return 0, false
 	}
-	cellW := 2
-	for i, n := range notes {
-		if i >= len(frets) {
-			continue
-		}
-		f := frets[i]
-		if f.String < 0 || f.String >= len(tuning) {
-			continue
-		}
-		cells[f.String][n.Slot] = f.Fret
-		if f.Fret > 9 {
-			cellW = 3
-		}
+	x := col - l.NameW - 1
+	mw := l.SlotsPerMeasure*l.CellW + 1
+	if x < 0 || mw < 1 || l.MeasuresPerLine < 1 {
+		return 0, false
 	}
-
-	names := make([]string, len(tuning))
-	nameW := 0
-	for s, open := range tuning {
-		names[s] = strings.TrimRight(music.MidiName(open), "-0123456789")
-		if len(names[s]) > nameW {
-			nameW = len(names[s])
-		}
+	mi, xin := x/mw, x%mw
+	if mi >= l.MeasuresPerLine || xin == mw-1 {
+		return 0, false
 	}
-
-	var b strings.Builder
-	for line := 0; line < measures; line += measuresPerLine {
-		lineEnd := line + measuresPerLine
-		if lineEnd > measures {
-			lineEnd = measures
-		}
-		for s := len(tuning) - 1; s >= 0; s-- {
-			b.WriteString(names[s])
-			b.WriteString(strings.Repeat(" ", nameW-len(names[s])))
-			b.WriteString("|")
-			for m := line; m < lineEnd; m++ {
-				for k := m * slotsPerMeasure; k < (m+1)*slotsPerMeasure; k++ {
-					if fret := cells[s][k]; fret >= 0 {
-						fs := strconv.Itoa(fret)
-						b.WriteString(fs)
-						b.WriteString(strings.Repeat("-", cellW-len(fs)))
-					} else {
-						b.WriteString(strings.Repeat("-", cellW))
-					}
-				}
-				b.WriteString("|")
-			}
-			b.WriteString("\n")
-		}
-		if lineEnd < measures {
-			b.WriteString("\n")
-		}
+	slot := (block*l.MeasuresPerLine+mi)*l.SlotsPerMeasure + xin/l.CellW
+	if slot >= l.Measures*l.SlotsPerMeasure {
+		return 0, false
 	}
-	return b.String(), Layout{
-		NameW:           nameW,
-		CellW:           cellW,
-		SlotsPerMeasure: slotsPerMeasure,
-		MeasuresPerLine: measuresPerLine,
-		Measures:        measures,
-		Rows:            len(tuning),
-	}
+	return slot, true
 }

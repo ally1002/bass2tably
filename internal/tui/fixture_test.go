@@ -1,7 +1,12 @@
 package tui
 
 import (
+	"math"
+	"os"
 	"testing"
+
+	"github.com/go-audio/audio"
+	"github.com/go-audio/wav"
 
 	"bass2tably/internal/app"
 	"bass2tably/internal/music"
@@ -43,4 +48,25 @@ func testResult(t *testing.T) *app.Result {
 		{String: 4, Fret: 0},
 	}
 	return newResult(t, notes, frets, 100, 4, 2.4)
+}
+
+func writeTestWav(t *testing.T, path string, rate, n int) {
+	t.Helper()
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	data := make([]int, n)
+	for i := range data {
+		data[i] = int(20000 * math.Sin(float64(i)/10))
+	}
+	enc := wav.NewEncoder(f, rate, 16, 1, 1)
+	buf := &audio.IntBuffer{Format: &audio.Format{NumChannels: 1, SampleRate: rate}, Data: data, SourceBitDepth: 16}
+	if err := enc.Write(buf); err != nil {
+		t.Fatal(err)
+	}
+	if err := enc.Close(); err != nil {
+		t.Fatal(err)
+	}
 }

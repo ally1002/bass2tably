@@ -21,3 +21,11 @@ func cursorSlot(res *app.Result, posSec float64) int {
 	}
 	return slot
 }
+
+func slotTime(res *app.Result, slot int) float64 {
+	if len(res.Notes) == 0 {
+		return 0
+	}
+	slotSec := 60.0 / res.BPM / float64(res.GridDiv)
+	return res.Notes[0].StartSec + float64(slot)*slotSec
+}

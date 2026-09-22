@@ -150,3 +150,7 @@ func (p notePanel) row(st styles, r app.NoteRow, idxW int, selected bool) string
 	}
 	return line
 }
+
+func (p *notePanel) scroll(delta int) {
+	p.offset = clamp(p.offset+delta, 0, max(len(p.rows)-p.height, 0))
+}

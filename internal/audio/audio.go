@@ -15,6 +15,9 @@ type Player struct {
 	frames  atomic.Int64
 	total   int64
 	samples []float64
+	params  atomic.Pointer[params]
+	scratch []float32
+	frac    float64
 }
 
 func New(samples []float64, rate int) (*Player, error) {
@@ -28,7 +31,9 @@ func New(samples []float64, rate int) (*Player, error) {
 		rate:    rate,
 		total:   int64(len(samples)),
 		samples: samples,
+		scratch: make([]float32, rate/10),
 	}
+	p.params.Store(&params{speed: 1})
 
 	cfg := malgo.DefaultDeviceConfig(malgo.Playback)
 	cfg.Playback.Format = malgo.FormatF32
@@ -39,17 +44,15 @@ func New(samples []float64, rate int) (*Player, error) {
 	// SeekSec storing between this load and store can lose one ~20 ms
 	// period of the seek; accepted, see PLAN.md C.1.
 	onData := func(out, _ []byte, frameCount uint32) {
-		pos := p.frames.Load()
-		n := int64(frameCount)
-		for i := int64(0); i < n; i++ {
-			var v float32
-			if idx := pos + i; idx < p.total {
-				v = float32(p.samples[idx])
-			}
-			binary.LittleEndian.PutUint32(out[i*4:], math.Float32bits(v))
+		n := int(frameCount)
+		if cap(p.scratch) < n {
+			p.scratch = make([]float32, n)
 		}
-		if pos += n; pos > p.total {
-			pos = p.total
+		buf := p.scratch[:n]
+		pos := p.frames.Load()
+		pos, p.frac = mix(buf, p.samples, pos, p.frac, p.params.Load())
+		for i, v := range buf {
+			binary.LittleEndian.PutUint32(out[i*4:], math.Float32bits(v))
 		}
 		p.frames.Store(pos)
 	}
@@ -99,4 +102,41 @@ func (p *Player) Close() {
 	p.dev.Uninit()
 	p.ctx.Uninit()
 	p.ctx.Free()
+}
+
+func (p *Player) update(f func(*params)) {
+	next := *p.params.Load()
+	f(&next)
+	p.params.Store(&next)
+}
+
+func (p *Player) SetSpeed(f float64) {
+	if f <= 0 {
+		return
+	}
+	p.update(func(q *params) { q.speed = f })
+}
+
+func (p *Player) SetLoop(startSec, endSec float64) {
+	a := int64(startSec * float64(p.rate))
+	b := int64(endSec * float64(p.rate))
+	a = max(a, 0)
+	b = min(b, p.total)
+	if b <= a {
+		p.ClearLoop()
+		return
+	}
+	p.update(func(q *params) { q.loopA, q.loopB = a, b })
+}
+
+func (p *Player) ClearLoop() {
+	p.update(func(q *params) { q.loopA, q.loopB = 0, 0 })
+}
+
+func (p *Player) SetClick(bpm, offsetSec float64, accentEvery int, on bool) {
+	var c *clickTrack
+	if on {
+		c = newClick(p.rate, bpm, offsetSec, accentEvery)
+	}
+	p.update(func(q *params) { q.click = c })
 }

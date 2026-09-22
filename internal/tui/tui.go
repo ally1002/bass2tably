@@ -29,10 +29,16 @@ const (
 type analysisDoneMsg struct{ res *app.Result }
 type analysisErrMsg struct{ err error }
 type clearErrMsg struct{}
+type flashMsg struct {
+	text string
+	err  bool
+}
+type clearFlashMsg struct{}
 type tickMsg struct{ gen int }
 
 type Config struct {
 	Theme string
+	ASCII bool
 }
 
 type viewerKeys struct {
@@ -53,23 +59,21 @@ type viewerKeys struct {
 	Fewer      key.Binding
 	More       key.Binding
 	AutoFit    key.Binding
+	Zoom       key.Binding
+	Rhythm     key.Binding
+	ViewMode   key.Binding
+	LoopA      key.Binding
+	LoopB      key.Binding
+	LoopClear  key.Binding
+	Click      key.Binding
+	Slower     key.Binding
+	Faster     key.Binding
+	Palette    key.Binding
+	Export     key.Binding
 	Theme      key.Binding
 	Back       key.Binding
 	Help       key.Binding
 	Quit       key.Binding
-}
-
-func (k viewerKeys) ShortHelp() []key.Binding {
-	return []key.Binding{k.PlayPause, k.Notes, k.Theme, k.Help, k.Quit}
-}
-
-func (k viewerKeys) FullHelp() [][]key.Binding {
-	return [][]key.Binding{
-		{k.PlayPause, k.PlayFrom, k.SeekBack, k.SeekFwd},
-		{k.Up, k.Down, k.Left, k.Right, k.Top, k.Bottom},
-		{k.Notes, k.PanelSide, k.PanelGrow, k.PanelShrnk, k.Fewer, k.More},
-		{k.AutoFit, k.Theme, k.Help, k.Back, k.Quit},
-	}
 }
 
 func defaultViewerKeys() viewerKeys {
@@ -85,6 +89,17 @@ func defaultViewerKeys() viewerKeys {
 		Fewer:      key.NewBinding(key.WithKeys("["), key.WithHelp("[", "fewer per line")),
 		More:       key.NewBinding(key.WithKeys("]"), key.WithHelp("]", "more per line")),
 		AutoFit:    key.NewBinding(key.WithKeys("0"), key.WithHelp("0", "fit to width")),
+		Zoom:       key.NewBinding(key.WithKeys("z"), key.WithHelp("z", "zoom")),
+		Rhythm:     key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "rhythm rows")),
+		ViewMode:   key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "page/scroll")),
+		LoopA:      key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "loop start")),
+		LoopB:      key.NewBinding(key.WithKeys("b"), key.WithHelp("b", "loop end")),
+		LoopClear:  key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "clear loop")),
+		Click:      key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "metronome")),
+		Slower:     key.NewBinding(key.WithKeys("<"), key.WithHelp("<", "slower")),
+		Faster:     key.NewBinding(key.WithKeys(">"), key.WithHelp(">", "faster")),
+		Palette:    key.NewBinding(key.WithKeys("ctrl+p", ":"), key.WithHelp("ctrl+p", "commands")),
+		Export:     key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "export")),
 		Theme:      key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "theme")),
 		Up:         key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
 		Down:       key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
@@ -92,7 +107,7 @@ func defaultViewerKeys() viewerKeys {
 		Right:      key.NewBinding(key.WithKeys("right", "l"), key.WithHelp("→/l", "right")),
 		Top:        key.NewBinding(key.WithKeys("g", "home"), key.WithHelp("g", "top")),
 		Bottom:     key.NewBinding(key.WithKeys("G", "end"), key.WithHelp("G", "bottom")),
-		Back:       key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "picker")),
+		Back:       key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "finder")),
 		Help:       key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
 		Quit:       key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
 	}
@@ -100,7 +115,7 @@ func defaultViewerKeys() viewerKeys {
 
 type model struct {
 	screen      screen
-	picker      picker
+	finder      finder
 	spin        spinner.Model
 	vp          viewport.Model
 	help        help.Model
@@ -123,11 +138,41 @@ type model struct {
 	st          styles
 	mpl         int
 	panelSize   int
+	sheet       tab.Sheet
+	cellW       int
+	glyphs      tab.Glyphs
+	rhythm      bool
+	wave        []float64
+	mode        viewMode
+	palette     cmdPalette
+	loopA       int
+	loopB       int
+	metronome   bool
+	speed       float64
+	flash       string
+	flashErr    bool
+	exp         exportDialog
 }
+
+type viewMode int
+
+const (
+	pageMode viewMode = iota
+	scrollMode
+)
+
+func (v viewMode) String() string {
+	if v == scrollMode {
+		return "scroll"
+	}
+	return "page"
+}
+
+const defaultCellW = 3
 
 func newModel(path string, opts app.Options) model {
 	m := model{
-		picker:    newPicker([]string{".wav", ".m4a", ".mp3", ".ogg", ".flac"}),
+		finder:    newFinder([]string{".wav", ".m4a", ".mp3", ".ogg", ".flac"}, opts),
 		spin:      spinner.New(spinner.WithSpinner(spinner.MiniDot)),
 		vp:        viewport.New(),
 		help:      help.New(),
@@ -136,8 +181,15 @@ func newModel(path string, opts app.Options) model {
 		path:      path,
 		newPlayer: newPlayer,
 		dark:      true,
+		cellW:     defaultCellW,
+		glyphs:    tab.Unicode,
+		rhythm:    true,
+		loopA:     -1,
+		loopB:     -1,
+		speed:     1,
 	}
 	m.vp.KeyMap.PageDown.SetKeys("pgdown", "f")
+	m.vp.KeyMap.PageUp.SetKeys("pgup")
 	m.vp.SetHorizontalStep(4)
 	m.applyTheme()
 	if path != "" {
@@ -153,6 +205,10 @@ func Run(path string, opts app.Options, cfg Config) error {
 	}
 	m := newModel(path, opts)
 	m.themeIdx = idx
+	if cfg.ASCII {
+		m.glyphs = tab.ASCII
+		m.finder.ascii = true
+	}
 	m.applyTheme()
 	_, err = tea.NewProgram(m).Run()
 	return err
@@ -172,7 +228,7 @@ func (m *model) cycleTheme() {
 
 func analyzeCmd(path string, opts app.Options) tea.Cmd {
 	return func() tea.Msg {
-		res, err := app.Analyze(path, opts)
+		res, err := app.AnalyzeCached(path, opts)
 		if err != nil {
 			return analysisErrMsg{err}
 		}
@@ -190,17 +246,18 @@ func (m model) Init() tea.Cmd {
 	if m.screen == analyzingScreen {
 		return tea.Batch(requestBackground, m.spin.Tick, analyzeCmd(m.path, m.opts))
 	}
-	return tea.Batch(requestBackground, m.picker.Init())
+	return tea.Batch(requestBackground, m.finder.Init())
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
-		switch msg.String() {
-		case "q", "ctrl+c":
+		inFinder := m.screen == pickerScreen || m.palette.open || m.exp.open
+		switch s := msg.String(); {
+		case s == "ctrl+c", s == "q" && !inFinder:
 			m.closePlayer()
 			return m, tea.Quit
-		case "t":
+		case s == "ctrl+t", s == "t" && !inFinder:
 			m.cycleTheme()
 			return m, nil
 		}
@@ -226,17 +283,20 @@ const (
 	minTabRows  = 4
 	minTabCols  = 24
 	minPanelW   = 28
-	pickerFixed = 6
+	pickerFixed = 7
 )
 
 func (m *model) resizeViewer() {
 	w := m.w
-	h := m.h - 2 - lipgloss.Height(m.help.View(m.keys))
+	h := m.h - 3 - lipgloss.Height(m.help.View(m.helpMap()))
 	if w < 1 {
 		w = 1
 	}
 	if h < 1 {
 		h = 1
+	}
+	if m.res != nil && len(m.res.Samples) > 0 && len(m.wave) != m.w {
+		m.wave = peaks(m.res.Samples, m.w)
 	}
 	if m.notes.open {
 		switch m.notes.side {
@@ -265,8 +325,12 @@ func (m *model) resizeViewer() {
 	if m.err != nil {
 		pickerErr = 1
 	}
-	m.picker.setSize(m.w, m.h-pickerFixed-pickerErr)
-	m.refitTab()
+	m.finder.setSize(m.w, m.h-pickerFixed-pickerErr)
+	m.rebuild()
+}
+
+func (m model) cellWidth() int {
+	return max(m.cellW, tab.MinCellW(m.res.Frets))
 }
 
 func (m model) autoPanelWidth(w int) int {
@@ -274,8 +338,9 @@ func (m model) autoPanelWidth(w int) int {
 		return w * 2 / 5
 	}
 	l := m.res.Layout
-	n := fitMeasures(w-minPanelW-1, l)
-	tabW := l.NameW + 1 + n*(l.SlotsPerMeasure*l.CellW+1)
+	cellW := m.cellWidth()
+	n := fitMeasures(w-minPanelW-1, l.NameW, cellW, l.SlotsPerMeasure, l.Measures)
+	tabW := l.NameW + 1 + n*(l.SlotsPerMeasure*cellW+1)
 	return w - tabW - 1
 }
 
@@ -292,27 +357,51 @@ func clamp(v, lo, hi int) int {
 	return v
 }
 
-func (m *model) refitTab() {
+func (m *model) rebuild() {
 	if m.res == nil {
 		return
 	}
+	l := m.res.Layout
 	mpl := m.mpl
-	if mpl <= 0 {
-		if m.vp.Width() <= 1 {
-			return
-		}
-		mpl = fitMeasures(m.vp.Width(), m.res.Layout)
+	switch {
+	case m.mode == scrollMode:
+		mpl = max(l.Measures, 1)
+	case mpl > 0:
+	case m.vp.Width() <= 1:
+		mpl = l.MeasuresPerLine
+	default:
+		mpl = fitMeasures(m.vp.Width(), l.NameW, m.cellWidth(), l.SlotsPerMeasure, l.Measures)
 	}
-	if mpl == m.res.Layout.MeasuresPerLine {
-		return
-	}
-	m.res.Tab, m.res.Layout = tab.RenderLayoutWidth(m.res.Notes, m.res.Frets, m.res.Tuning, m.res.GridDiv, mpl)
+	m.sheet = tab.Build(m.res.Notes, m.res.Frets, m.res.Tuning, m.res.GridDiv, mpl, m.cellW)
+	l = m.sheet.Layout()
+	l.Top = 1
+	l.Bottom = m.rhythmOpts().rows()
+	m.res.Layout = l
 	m.refreshCursor()
 	m.ensureCursorVisible()
 }
 
+func (m model) rhythmOpts() rhythmOpts {
+	r := rhythmOpts{gridDiv: m.res.GridDiv, glyphs: rhythmUnicode, on: m.rhythm}
+	if m.glyphs == tab.ASCII {
+		r.glyphs = rhythmASCII
+	}
+	if anyShorterThanBeat(m.sheet, r.gridDiv) {
+		r.levels = beamLevels(r.gridDiv)
+	}
+	return r
+}
+
+func (m *model) cycleZoom() {
+	m.cellW++
+	if m.cellW > 4 {
+		m.cellW = 2
+	}
+	m.rebuild()
+}
+
 func (m *model) setMeasuresPerLine(delta int) {
-	if m.res == nil {
+	if m.res == nil || m.mode == scrollMode {
 		return
 	}
 	cur := m.res.Layout.MeasuresPerLine
@@ -321,7 +410,7 @@ func (m *model) setMeasuresPerLine(delta int) {
 		return
 	}
 	m.mpl = next
-	m.refitTab()
+	m.rebuild()
 }
 
 func (m *model) resizePanel(delta int) {
@@ -339,6 +428,14 @@ func (m *model) resizePanel(delta int) {
 
 func (m model) updatePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.MouseClickMsg:
+		if msg.Button != tea.MouseLeft {
+			return m, nil
+		}
+		cmd := m.finder.click(msg.X, msg.Y-m.finderListTop())
+		return m, cmd
+	case tea.MouseWheelMsg:
+		return m, m.finder.wheel(wheelDelta(msg))
 	case clearErrMsg:
 		m.err = nil
 		m.resizeViewer()
@@ -353,13 +450,14 @@ func (m model) updatePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.spin.Tick, analyzeCmd(msg.path, m.opts))
 	}
 	var cmd tea.Cmd
-	m.picker, cmd = m.picker.Update(msg)
+	m.finder, cmd = m.finder.Update(msg)
 	return m, cmd
 }
 
 func (m model) updateAnalyzing(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case analysisDoneMsg:
+		pushRecent(msg.res.Path)
 		m.res = msg.res
 		m.screen = viewerScreen
 		m.notes.setResult(msg.res)
@@ -370,6 +468,10 @@ func (m model) updateAnalyzing(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.curSlot = 0
 		m.curPos = 0
 		m.mpl = 0
+		m.wave = nil
+		m.loopA, m.loopB = -1, -1
+		m.metronome = false
+		m.speed = 1
 		m.vp.GotoTop()
 		m.vp.SetXOffset(0)
 		m.resizeViewer()
@@ -379,7 +481,7 @@ func (m model) updateAnalyzing(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.err = msg.err
 		m.screen = pickerScreen
 		m.resizeViewer()
-		return m, tea.Batch(m.picker.Init(), clearErrCmd())
+		return m, tea.Batch(m.finder.Init(), clearErrCmd())
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spin, cmd = m.spin.Update(msg)
@@ -390,6 +492,22 @@ func (m model) updateAnalyzing(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) updateViewer(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case flashMsg:
+		m.flash, m.flashErr = msg.text, msg.err
+		return m, tea.Tick(3*time.Second, func(time.Time) tea.Msg { return clearFlashMsg{} })
+	case clearFlashMsg:
+		m.flash = ""
+		return m, nil
+	case tea.MouseClickMsg:
+		if msg.Button == tea.MouseLeft {
+			m.click(msg.X, msg.Y)
+		}
+		return m, nil
+	case tea.MouseWheelMsg:
+		if _, inside := m.notesRowAt(msg.X, msg.Y); inside {
+			m.notes.scroll(wheelDelta(msg))
+			return m, nil
+		}
 	case tickMsg:
 		if msg.gen != m.tickGen {
 			return m, nil
@@ -411,73 +529,14 @@ func (m model) updateViewer(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refreshCursor()
 		return m, tickCmd(m.tickGen)
 	case tea.KeyPressMsg:
-		switch {
-		case key.Matches(msg, m.keys.PlayPause):
-			return m.togglePlayback()
-		case key.Matches(msg, m.keys.SeekBack):
-			m.seekMeasures(-1)
-			return m, nil
-		case key.Matches(msg, m.keys.SeekFwd):
-			m.seekMeasures(+1)
-			return m, nil
-		case key.Matches(msg, m.keys.Notes):
-			m.toggleNotes()
-			return m, nil
-		case key.Matches(msg, m.keys.PanelSide):
-			m.togglePanelSide()
-			return m, nil
-		case key.Matches(msg, m.keys.PanelGrow):
-			m.resizePanel(+1)
-			return m, nil
-		case key.Matches(msg, m.keys.PanelShrnk):
-			m.resizePanel(-1)
-			return m, nil
-		case key.Matches(msg, m.keys.Fewer):
-			m.setMeasuresPerLine(-1)
-			return m, nil
-		case key.Matches(msg, m.keys.More):
-			m.setMeasuresPerLine(+1)
-			return m, nil
-		case key.Matches(msg, m.keys.AutoFit):
-			m.mpl = 0
-			m.refitTab()
-			return m, nil
-		case key.Matches(msg, m.keys.Help):
-			m.help.ShowAll = !m.help.ShowAll
-			m.resizeViewer()
-			return m, nil
-		case key.Matches(msg, m.keys.Back):
-			m.closePlayer()
-			m.screen = pickerScreen
-			m.res = nil
-			m.path = ""
-			return m, m.picker.Init()
+		if m.exp.open {
+			return m, m.updateExport(msg)
 		}
-		if m.notes.open {
-			switch {
-			case key.Matches(msg, m.keys.Up):
-				m.selectNote(m.notes.sel - 1)
-				return m, nil
-			case key.Matches(msg, m.keys.Down):
-				m.selectNote(m.notes.sel + 1)
-				return m, nil
-			case key.Matches(msg, m.keys.Top):
-				m.selectNote(0)
-				return m, nil
-			case key.Matches(msg, m.keys.Bottom):
-				m.selectNote(len(m.notes.rows) - 1)
-				return m, nil
-			case key.Matches(msg, m.keys.PlayFrom):
-				return m.playFromSelection()
-			}
+		if m.palette.open {
+			return m, m.updatePalette(msg)
 		}
-		switch {
-		case key.Matches(msg, m.keys.Top):
-			m.vp.GotoTop()
-			return m, nil
-		case key.Matches(msg, m.keys.Bottom):
-			m.vp.GotoBottom()
-			return m, nil
+		if cmd, ok := m.runKey(msg); ok {
+			return m, cmd
 		}
 	}
 	var cmd tea.Cmd
@@ -613,11 +672,15 @@ func (m *model) setTabContent() {
 	if m.res == nil {
 		return
 	}
-	block, col := -1, -1
+	cur := -1
 	if len(m.res.Notes) > 0 {
-		block, col = m.res.Layout.SlotCell(m.curSlot)
+		cur = m.curSlot
 	}
-	m.vp.SetContent(renderTab(m.res.Tab, m.res.Layout, m.st, block, col))
+	m.vp.SetContent(renderSheet(m.sheet, m.glyphs, m.st, cur, m.shading(), m.rhythmOpts(), m.loopRange()))
+}
+
+func (m model) shading() bool {
+	return m.curPos > 0
 }
 
 func (m *model) refreshCursor() {
@@ -645,10 +708,25 @@ func (m *model) ensureCursorVisible() {
 	m.followCursor(block, col)
 }
 
+func (m *model) toggleMode() {
+	if m.mode == pageMode {
+		m.mode = scrollMode
+	} else {
+		m.mode = pageMode
+	}
+	m.vp.GotoTop()
+	m.vp.SetXOffset(0)
+	m.rebuild()
+}
+
 func (m *model) followCursor(block, col int) {
 	l := m.res.Layout
-	top := block * (l.Rows + 1)
-	bottom := top + l.Rows - 1
+	if m.mode == scrollMode {
+		m.vp.SetXOffset(max(0, col-m.vp.Width()/3))
+		return
+	}
+	top := block * l.Stride()
+	bottom := top + l.Stride() - 2
 	switch {
 	case top < m.vp.YOffset():
 		m.vp.SetYOffset(top)
@@ -675,6 +753,7 @@ func (m model) View() tea.View {
 	}
 	v := tea.NewView(s)
 	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
 	return v
 }
 
@@ -703,21 +782,23 @@ func (m model) pickerView() string {
 	b.WriteString(m.brand())
 	b.WriteString(m.st.muted.Render("  turn a bass recording into tab"))
 	b.WriteString("\n\n")
-	b.WriteString(" " + m.picker.breadcrumb(m.st))
+	b.WriteString(" " + ansi.Truncate(m.finder.input.View(m.st), max(w-1, 1), ""))
+	b.WriteString("\n")
+	b.WriteString(" " + m.finder.breadcrumb(m.st))
 	b.WriteString("\n")
 	if m.err != nil {
 		b.WriteString(" " + m.st.danger.Render("✗ "+m.err.Error()))
 		b.WriteString("\n")
 	}
-	b.WriteString(m.rule(m.st.muted.Render(fmt.Sprintf("%d items", len(m.picker.entries))), w))
+	b.WriteString(m.rule(m.st.muted.Render(m.finder.status()), w))
 	b.WriteString("\n")
-	b.WriteString(m.picker.View(m.st))
+	b.WriteString(m.finder.View(m.st))
 	b.WriteString("\n")
 	b.WriteString(m.rule("", w))
 	b.WriteString("\n")
-	b.WriteString(m.hint([][2]string{
-		{"↑↓", "move"}, {"enter", "open"}, {"h", "up"}, {"~", "home"}, {"t", "theme"}, {"q", "quit"},
-	}))
+	b.WriteString(ansi.Truncate(m.hint([][2]string{
+		{"type", "find"}, {"↑↓", "move"}, {"enter", "open"}, {"⌫", "up"}, {"~", "home"}, {"esc", "clear"}, {"ctrl+t", "theme"}, {"ctrl+c", "quit"},
+	}), w, ""))
 	return b.String()
 }
 
@@ -730,17 +811,12 @@ func (m model) hint(pairs [][2]string) string {
 }
 
 func (m model) analyzingView() string {
-	card := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(m.st.pal.frame).
-		Padding(1, 3)
-	body := m.spin.View() + " " + m.st.title.Render("analyzing") + "\n" +
-		m.st.accent.Render(filepath.Base(m.path)) + "\n\n" +
+	body := m.spin.View() + " " + m.st.title.Render("analyzing ") + m.st.accent.Render(filepath.Base(m.path)) + "\n" +
 		m.st.muted.Render("onsets · tempo · pitch candidates")
 	if m.w == 0 || m.h == 0 {
-		return card.Render(body)
+		return body
 	}
-	return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, card.Render(body))
+	return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, body)
 }
 
 func fmtTime(sec float64) string {
@@ -762,29 +838,15 @@ func (m model) tuningName() string {
 
 func (m model) headerView() string {
 	w := max(m.w, 1)
-	bpm := fmt.Sprintf("%.1f", m.res.BPM)
-	if m.res.BPMEstimated {
-		bpm = "~" + bpm
-	}
-	sep := m.st.faint.Render("  ·  ")
-	stat := func(v, unit string) string {
-		return m.st.fg.Render(v) + " " + m.st.muted.Render(unit)
-	}
 	name := m.brand() + " " + m.st.title.Render(" "+filepath.Base(m.res.Path))
-	grid := fmt.Sprintf("1/%d", m.res.GridDiv*4)
-	notes := fmt.Sprint(len(m.res.Notes))
-	full := name + sep + stat(bpm, "bpm") + sep + stat(grid, "grid") +
-		sep + stat(m.tuningName(), "tuning") + sep + stat(notes, "notes")
-	compact := name + sep + stat(bpm, "bpm") + sep + m.st.fg.Render(grid) +
-		sep + m.st.fg.Render(m.tuningName()) + sep + stat(notes, "notes")
-	right := m.st.muted.Render(m.st.themeName) + " " + m.st.faint.Render(m.st.themeTag) + " "
-	if lipgloss.Width(full)+lipgloss.Width(right)+1 <= w {
-		return m.spread(full, right, w)
+	sep := m.st.faint.Render(" · ")
+	rhythm := "rhythm off"
+	if m.rhythm {
+		rhythm = "rhythm"
 	}
-	if lipgloss.Width(compact) <= w {
-		return m.spread(compact, right, w)
-	}
-	return ansi.Truncate(name+sep+stat(bpm, "bpm")+sep+stat(notes, "notes"), w, "…")
+	right := m.st.muted.Render(fmt.Sprintf("×%d", m.res.Layout.CellW)) + sep +
+		m.st.muted.Render(rhythm) + sep + m.st.muted.Render(m.mode.String()) + " "
+	return m.spread(name, right, w)
 }
 
 func (m model) spread(left, right string, w int) string {
@@ -795,40 +857,69 @@ func (m model) spread(left, right string, w int) string {
 	return left + strings.Repeat(" ", w-lw-rw) + right
 }
 
-func (m model) transportView() string {
+func (m model) waveView() string {
 	w := max(m.w, 1)
+	if len(m.wave) == 0 {
+		return blankRow(w)
+	}
+	frac := 0.0
+	if d := m.res.DurationSec; d > 0 {
+		frac = m.curPos / d
+	}
+	la, lb := m.loopFractions()
+	return waveRow(m.wave, frac, la, lb, m.st, m.glyphs == tab.ASCII)
+}
+
+func (m model) statusView() string {
+	w := max(m.w, 1)
+	on := m.st.onBand
+	sp := func(n int) string { return on(m.st.fg).Render(strings.Repeat(" ", n)) }
+	sep := on(m.st.faint).Render(" · ")
+	var left string
 	if m.audioErr != nil {
-		return ansi.Truncate(" "+m.st.danger.Render("⊘ playback unavailable: "+m.audioErr.Error()), w, "…")
-	}
-	icon := m.st.muted.Render("■")
-	switch {
-	case m.playing():
-		icon = m.st.accent.Render("▶")
-	case m.player != nil:
-		icon = m.st.fg.Render("❚❚")
-	}
-	dur := m.res.DurationSec
-	clock := m.st.fg.Bold(true).Render(fmtTime(m.curPos)) + m.st.faint.Render(" / ") + m.st.muted.Render(fmtTime(dur))
-	measure := m.curSlot/m.res.Layout.SlotsPerMeasure + 1
-	beat := (m.curSlot%m.res.Layout.SlotsPerMeasure)/m.res.GridDiv + 1
-	pos := m.st.muted.Render("m ") + m.st.fg.Render(fmt.Sprintf("%d", measure)) +
-		m.st.faint.Render(fmt.Sprintf("/%d", m.res.Layout.Measures)) +
-		m.st.muted.Render("  beat ") + m.st.fg.Render(fmt.Sprint(beat)) +
-		m.st.faint.Render(fmt.Sprintf("   %d/line", m.res.Layout.MeasuresPerLine))
-	fixed := lipgloss.Width(icon) + lipgloss.Width(clock) + lipgloss.Width(pos) + 7
-	barW := w - fixed
-	bar := ""
-	if barW >= 8 {
-		frac := 0.0
-		if dur > 0 {
-			frac = m.curPos / dur
+		left = sp(1) + on(m.st.danger).Render("⊘ playback unavailable: "+m.audioErr.Error())
+	} else {
+		icon := on(m.st.muted).Render("■")
+		switch {
+		case m.playing():
+			icon = on(m.st.accent).Render("▶")
+		case m.player != nil:
+			icon = on(m.st.fg).Render("❚❚")
 		}
-		on := int(frac*float64(barW) + 0.5)
-		on = clamp(on, 0, barW)
-		bar = m.st.accent.Render(strings.Repeat("━", on)) + m.st.faint.Render(strings.Repeat("─", barW-on))
-		return " " + icon + " " + clock + "  " + bar + "  " + pos
+		clock := on(m.st.fg.Bold(true)).Render(fmtTime(m.curPos)) + on(m.st.faint).Render(" / ") +
+			on(m.st.muted).Render(fmtTime(m.res.DurationSec))
+		measure := m.curSlot/m.res.Layout.SlotsPerMeasure + 1
+		beat := (m.curSlot%m.res.Layout.SlotsPerMeasure)/m.res.GridDiv + 1
+		pos := on(m.st.muted).Render("m ") + on(m.st.fg).Render(fmt.Sprint(measure)) +
+			on(m.st.faint).Render(fmt.Sprintf("/%d", m.res.Layout.Measures)) +
+			on(m.st.muted).Render("  beat ") + on(m.st.fg).Render(fmt.Sprint(beat))
+		left = sp(1) + icon + sp(1) + clock + sp(3) + pos + m.practiceLabels(sp) + m.flashLabel(sp)
 	}
-	return ansi.Truncate(" "+icon+" "+clock+"  "+pos, w, "…")
+	bpm := fmt.Sprintf("%.1f", m.res.BPM)
+	if m.res.BPMEstimated {
+		bpm = "~" + bpm
+	}
+	tempo := on(m.st.fg).Render(bpm+" ") + on(m.st.muted).Render("bpm")
+	theme := on(m.st.muted).Render(m.st.themeName + " ")
+	full := tempo + sep + on(m.st.fg).Render(m.tuningName()) + sep +
+		on(m.st.fg).Render(fmt.Sprintf("1/%d", m.res.GridDiv*4)) + sep +
+		on(m.st.fg).Render(m.perLineLabel()) + sep + theme
+	for _, right := range []string{full, tempo + sep + theme, ""} {
+		if lipgloss.Width(left)+lipgloss.Width(right)+1 <= w {
+			return m.bandLine(left, right, w)
+		}
+	}
+	return m.bandLine(left, "", w)
+}
+
+func (m model) bandLine(left, right string, w int) string {
+	fill := m.st.onBand(m.st.fg)
+	lw, rw := lipgloss.Width(left), lipgloss.Width(right)
+	if lw+rw+1 > w {
+		left = ansi.Truncate(left, max(w-1, 0), "") + fill.Render("…")
+		lw, right, rw = lipgloss.Width(left), "", 0
+	}
+	return left + fill.Render(strings.Repeat(" ", max(w-lw-rw, 0))) + right
 }
 
 func (m model) viewerView() string {
@@ -842,11 +933,227 @@ func (m model) viewerView() string {
 		case panelRight:
 			border := strings.TrimRight(strings.Repeat(m.st.frame.Render("│")+"\n", m.vp.Height()), "\n")
 			panel := m.rule(m.notes.header(m.st), m.notes.width) + "\n" + m.notes.View(m.st)
-			panel = lipgloss.NewStyle().Width(m.notes.width).Height(m.vp.Height()).Render(panel)
+			panel = lipgloss.NewStyle().Width(m.notes.width).Height(m.vp.Height()).MaxHeight(m.vp.Height()).Render(panel)
 			body = lipgloss.JoinHorizontal(lipgloss.Top, tabView, border, panel)
 		default:
-			body += "\n" + m.rule(m.notes.header(m.st), m.w) + "\n" + m.notes.View(m.st)
+			body += "\n" + m.rule(m.notes.header(m.st), m.w) + "\n" +
+				lipgloss.NewStyle().Height(m.notes.height).MaxHeight(m.notes.height).Render(m.notes.View(m.st))
 		}
 	}
-	return m.headerView() + "\n" + m.transportView() + "\n" + body + "\n" + m.help.View(m.keys)
+	screen := m.headerView() + "\n" + body + "\n" + m.waveView() + "\n" + m.statusView() + "\n" + m.helpView()
+	if m.exp.open {
+		return m.overlay(screen, m.exportView())
+	}
+	if m.palette.open {
+		return m.overlay(screen, m.paletteView())
+	}
+	return screen
+}
+
+func (m model) helpView() string {
+	lines := strings.Split(m.help.View(m.helpMap()), "\n")
+	for i, line := range lines {
+		lines[i] = ansi.Truncate(line, max(m.w, 1), "")
+	}
+	return strings.Join(lines, "\n")
+}
+
+const (
+	tabTop        = 1
+	finderListTop = 5
+	wheelStep     = 3
+)
+
+func wheelDelta(msg tea.MouseWheelMsg) int {
+	if msg.Button == tea.MouseWheelUp {
+		return -wheelStep
+	}
+	return wheelStep
+}
+
+func (m model) finderListTop() int {
+	if m.err != nil {
+		return finderListTop + 1
+	}
+	return finderListTop
+}
+
+func (m model) waveRowY() int {
+	y := tabTop + m.vp.Height()
+	if m.notes.open && m.notes.side == panelBottom {
+		y += 1 + m.notes.height
+	}
+	return y
+}
+
+func (m model) notesRowAt(x, y int) (int, bool) {
+	if !m.notes.open {
+		return 0, false
+	}
+	var y0 int
+	switch m.notes.side {
+	case panelRight:
+		if x < m.vp.Width()+1 {
+			return 0, false
+		}
+		y0 = tabTop + 1
+	default:
+		y0 = tabTop + m.vp.Height() + 1
+	}
+	if y < y0 || y >= y0+m.notes.height {
+		return 0, false
+	}
+	return y - y0 + m.notes.offset, true
+}
+
+func (m *model) click(x, y int) {
+	if m.res == nil {
+		return
+	}
+	switch {
+	case y == m.waveRowY():
+		if d := m.res.DurationSec; d > 0 && m.w > 0 {
+			m.setPos(d * float64(x) / float64(m.w))
+			m.syncNoteSel()
+			m.ensureCursorVisible()
+		}
+	case y >= tabTop && y < tabTop+m.vp.Height() && x < m.vp.Width():
+		if len(m.res.Notes) == 0 {
+			return
+		}
+		if slot, ok := m.res.Layout.SlotAt(y-tabTop+m.vp.YOffset(), x+m.vp.XOffset()); ok {
+			m.setPos(slotTime(m.res, slot))
+			m.syncNoteSel()
+		}
+	default:
+		if row, inside := m.notesRowAt(x, y); inside && row < len(m.notes.rows) {
+			m.selectNote(row)
+		}
+	}
+}
+
+func (m model) perLineLabel() string {
+	if m.mode == scrollMode {
+		return "scroll"
+	}
+	return fmt.Sprintf("%d/line", m.res.Layout.MeasuresPerLine)
+}
+
+var speedSteps = []float64{0.5, 0.75, 1}
+
+func (m model) measureOf(slot int) int {
+	return slot / m.res.Layout.SlotsPerMeasure
+}
+
+func (m model) loopRange() [2]int { return [2]int{m.loopA, m.loopB} }
+
+func (m model) loopActive() bool { return m.loopA >= 0 && m.loopB > m.loopA }
+
+func (m model) loopSeconds() (float64, float64) {
+	spm := m.res.Layout.SlotsPerMeasure
+	return slotTime(m.res, m.loopA*spm), slotTime(m.res, m.loopB*spm)
+}
+
+func (m model) loopFractions() (float64, float64) {
+	if m.res == nil || !m.loopActive() || m.res.DurationSec <= 0 {
+		return 0, 0
+	}
+	a, b := m.loopSeconds()
+	return a / m.res.DurationSec, b / m.res.DurationSec
+}
+
+func (m *model) setLoopA() {
+	if m.res == nil {
+		return
+	}
+	m.loopA = m.measureOf(m.curSlot)
+	if m.loopB >= 0 && m.loopB <= m.loopA {
+		m.loopA, m.loopB = m.loopB-1, m.loopA+1
+	}
+	m.applyLoop()
+}
+
+func (m *model) setLoopB() {
+	if m.res == nil {
+		return
+	}
+	m.loopB = m.measureOf(m.curSlot) + 1
+	if m.loopA < 0 {
+		m.loopA = m.loopB - 1
+	}
+	if m.loopB <= m.loopA {
+		m.loopA, m.loopB = m.loopB-1, m.loopA+1
+	}
+	m.applyLoop()
+}
+
+func (m *model) clearLoop() {
+	m.loopA, m.loopB = -1, -1
+	m.applyLoop()
+}
+
+func (m *model) applyLoop() {
+	if m.player != nil {
+		if m.loopActive() {
+			a, b := m.loopSeconds()
+			m.player.SetLoop(a, b)
+		} else {
+			m.player.ClearLoop()
+		}
+	}
+	m.setTabContent()
+}
+
+func (m *model) toggleClick() {
+	if m.res == nil || len(m.res.Notes) == 0 {
+		return
+	}
+	m.metronome = !m.metronome
+	if m.player != nil {
+		m.player.SetClick(m.res.BPM, m.res.Notes[0].StartSec, 4, m.metronome)
+	}
+}
+
+func (m *model) stepSpeed(dir int) {
+	i := 0
+	for k, s := range speedSteps {
+		if s == m.speed {
+			i = k
+		}
+	}
+	i = clamp(i+dir, 0, len(speedSteps)-1)
+	m.speed = speedSteps[i]
+	if m.player != nil {
+		m.player.SetSpeed(m.speed)
+	}
+}
+
+func (m model) practiceLabels(sp func(int) string) string {
+	on := m.st.onBand
+	var b strings.Builder
+	if m.loopActive() {
+		b.WriteString(sp(3) + on(m.st.accent).Render(fmt.Sprintf("↻ %d–%d", m.loopA+1, m.loopB)))
+	}
+	if m.metronome {
+		b.WriteString(sp(3) + on(m.st.accent).Render("♪ click"))
+	}
+	if m.speed != 1 {
+		label := fmt.Sprintf("%g×", m.speed)
+		if m.speed <= 0.5 {
+			label += " (−1 oct)"
+		}
+		b.WriteString(sp(3) + on(m.st.accent).Render(label))
+	}
+	return b.String()
+}
+
+func (m model) flashLabel(sp func(int) string) string {
+	if m.flash == "" {
+		return ""
+	}
+	style := m.st.onBand(m.st.accent)
+	if m.flashErr {
+		style = m.st.onBand(m.st.danger)
+	}
+	return sp(3) + style.Render(m.flash)
 }

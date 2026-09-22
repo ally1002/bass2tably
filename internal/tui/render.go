@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -8,18 +9,55 @@ import (
 	"bass2tably/internal/tab"
 )
 
+type paint struct{ pre, post string }
+
+const paintProbe = "\x1f"
+
+func newPaint(st lipgloss.Style) paint {
+	s := st.Render(paintProbe)
+	i := strings.Index(s, paintProbe)
+	if i < 0 {
+		return paint{}
+	}
+	return paint{pre: s[:i], post: s[i+len(paintProbe):]}
+}
+
+type paints struct {
+	name, fret, sustain                                                                    []paint
+	bar, dash, cursor, cursorDash, played, ruler, rulerCur, rulerLoop, rulerCurLoop, frame paint
+}
+
+func newPaints(st styles, rows int) paints {
+	p := paints{
+		bar:          newPaint(st.bar),
+		dash:         newPaint(st.dash),
+		cursor:       newPaint(st.cursor),
+		cursorDash:   newPaint(st.cursorDash),
+		played:       newPaint(st.played),
+		ruler:        newPaint(st.ruler),
+		rulerCur:     newPaint(st.rulerCur),
+		rulerLoop:    newPaint(st.ruler.Background(st.pal.selBg)),
+		rulerCurLoop: newPaint(st.rulerCur.Background(st.pal.selBg)),
+		frame:        newPaint(st.frame),
+	}
+	for s := 0; s < rows; s++ {
+		p.name = append(p.name, newPaint(st.name(s)))
+		p.fret = append(p.fret, newPaint(st.fret(s)))
+		p.sustain = append(p.sustain, newPaint(st.sustain(s)))
+	}
+	return p
+}
+
 type runWriter struct {
 	b     strings.Builder
-	style lipgloss.Style
-	key   string
+	paint paint
 	buf   strings.Builder
 }
 
-func (w *runWriter) write(key string, st lipgloss.Style, s string) {
-	if key != w.key {
+func (w *runWriter) write(p paint, s string) {
+	if p != w.paint {
 		w.flush()
-		w.key = key
-		w.style = st
+		w.paint = p
 	}
 	w.buf.WriteString(s)
 }
@@ -28,7 +66,9 @@ func (w *runWriter) flush() {
 	if w.buf.Len() == 0 {
 		return
 	}
-	w.b.WriteString(w.style.Render(w.buf.String()))
+	w.b.WriteString(w.paint.pre)
+	w.b.WriteString(w.buf.String())
+	w.b.WriteString(w.paint.post)
 	w.buf.Reset()
 }
 
@@ -37,64 +77,93 @@ func (w *runWriter) String() string {
 	return w.b.String()
 }
 
-func renderTab(plain string, l tab.Layout, st styles, curBlock, curCol int) string {
-	lines := strings.Split(plain, "\n")
-	stride := l.Rows + 1
-	if stride < 2 {
-		return plain
-	}
-	for r, line := range lines {
-		row := r % stride
-		if row >= l.Rows || len(line) < l.NameW+1 {
-			continue
+func renderSheet(sh tab.Sheet, g tab.Glyphs, st styles, cur int, shading bool, rh rhythmOpts, loop [2]int) string {
+	var b strings.Builder
+	p := newPaints(st, sh.Rows)
+	last := len(sh.Systems) - 1
+	for si, sys := range sh.Systems {
+		if si > 0 {
+			b.WriteString("\n")
 		}
-		block := r / stride
-		s := l.Rows - 1 - row
-		lines[r] = renderTabRow(line, l, st, s, block == curBlock, curCol)
+		b.WriteString(rulerRow(sh, sys, p, cur, loop))
+		b.WriteString("\n")
+		for s := sh.Rows - 1; s >= 0; s-- {
+			b.WriteString(stringRow(sh, sys, s, g, p, cur, shading, si == last))
+			b.WriteString("\n")
+		}
+		for _, row := range systemRhythmRows(sh, sys, rh) {
+			b.WriteString(p.frame.pre)
+			b.WriteString(row)
+			b.WriteString(p.frame.post)
+			b.WriteString("\n")
+		}
 	}
-	return strings.Join(lines, "\n")
+	return b.String()
 }
 
-func renderTabRow(line string, l tab.Layout, st styles, s int, cursorBlock bool, curCol int) string {
+func rulerRow(sh tab.Sheet, sys tab.System, p paints, cur int, loop [2]int) string {
 	var w runWriter
-	w.write("name", st.name(s), line[:l.NameW])
-	col := l.NameW
-	for col < len(line) {
-		if line[col] == '|' {
-			w.write("bar", st.bar, "|")
-			col++
-			continue
+	w.write(p.ruler, strings.Repeat(" ", sh.NameW+1))
+	fieldW := sh.SlotsPerMeasure*sh.CellW + 1
+	for _, m := range sys.Measures {
+		label := strconv.Itoa(m.Index + 1)
+		inLoop := m.Index >= loop[0] && m.Index < loop[1]
+		style := p.ruler
+		switch current := cur >= 0 && cur/sh.SlotsPerMeasure == m.Index; {
+		case current && inLoop:
+			style = p.rulerCurLoop
+		case current:
+			style = p.rulerCur
+		case inLoop:
+			style = p.rulerLoop
 		}
-		end := col + l.CellW
-		if end > len(line) {
-			w.write("tail", st.dash, line[col:])
-			break
-		}
-		cell := line[col:end]
-		isFret := cell[0] >= '0' && cell[0] <= '9'
-		switch {
-		case cursorBlock && col == curCol && isFret:
-			w.write("cursor", st.cursor, cell)
-		case cursorBlock && col == curCol:
-			w.write("cursorDash", st.cursorDash, cell)
-		case isFret:
-			w.write("fret", st.fret(s), cell)
-		default:
-			w.write("dash", st.dash, cell)
-		}
-		col = end
+		w.write(style, label+strings.Repeat(" ", max(fieldW-len(label), 0)))
 	}
 	return w.String()
 }
 
-func fitMeasures(width int, l tab.Layout) int {
-	mw := l.SlotsPerMeasure*l.CellW + 1
-	n := (width - l.NameW - 1) / mw
+func stringRow(sh tab.Sheet, sys tab.System, s int, g tab.Glyphs, p paints, cur int, shading, last bool) string {
+	var w runWriter
+	w.write(p.name[s], sh.Names[s]+strings.Repeat(" ", sh.NameW-len(sh.Names[s])))
+	w.write(p.bar, g.Bar)
+	for mi, m := range sys.Measures {
+		for _, col := range m.Columns {
+			w.write(cellPaint(p, col, col.Cells[s], s, cur, shading), sh.CellText(col, s, g))
+		}
+		if last && mi == len(sys.Measures)-1 {
+			w.write(p.bar, g.End)
+		} else {
+			w.write(p.bar, g.Bar)
+		}
+	}
+	return w.String()
+}
+
+func cellPaint(p paints, col tab.Column, c tab.Cell, s, cur int, shading bool) paint {
+	switch {
+	case col.Slot == cur && c.Kind == tab.Onset:
+		return p.cursor
+	case col.Slot == cur:
+		return p.cursorDash
+	case c.Kind == tab.Onset && shading && col.Slot < cur:
+		return p.played
+	case c.Kind == tab.Onset:
+		return p.fret[s]
+	case c.Kind == tab.Sustain || c.Kind == tab.Tied:
+		return p.sustain[s]
+	default:
+		return p.dash
+	}
+}
+
+func fitMeasures(width, nameW, cellW, spm, measures int) int {
+	mw := spm*cellW + 1
+	n := (width - nameW - 1) / mw
 	if n < 1 {
 		n = 1
 	}
-	if l.Measures > 0 && n > l.Measures {
-		n = l.Measures
+	if measures > 0 && n > measures {
+		n = measures
 	}
 	return n
 }
