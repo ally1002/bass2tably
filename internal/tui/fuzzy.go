@@ -11,6 +11,17 @@ func lowerRunes(s string) []rune {
 }
 
 func fuzzy(pattern, s string) (score int, pos []int, ok bool) {
+	if pattern == "" {
+		return 0, nil, true
+	}
+	score, pos, ok = fuzzyScore(pattern, s)
+	if !ok {
+		return 0, nil, false
+	}
+	return score - len([]rune(s))/8, pos, true
+}
+
+func fuzzyScore(pattern, s string) (score int, pos []int, ok bool) {
 	p, t := lowerRunes(pattern), lowerRunes(s)
 	if len(p) == 0 {
 		return 0, nil, true
@@ -24,10 +35,7 @@ func fuzzy(pattern, s string) (score int, pos []int, ok bool) {
 			score, pos, ok = sc, ps, true
 		}
 	}
-	if !ok {
-		return 0, nil, false
-	}
-	return score - len(t)/8, pos, true
+	return score, pos, ok
 }
 
 func greedyFrom(p, t []rune, start int) (score int, pos []int, ok bool) {

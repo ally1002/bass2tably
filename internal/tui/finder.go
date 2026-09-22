@@ -479,11 +479,15 @@ func (q *queryInput) key(msg tea.KeyPressMsg) bool {
 }
 
 func (q queryInput) View(st styles) string {
-	cursor := st.cursor.Render(" ")
+	return q.view(st.accent, st.fg, st.faint, st.cursor)
+}
+
+func (q queryInput) view(prompt, text, placeholder, cursor lipgloss.Style) string {
+	block := cursor.Render(" ")
 	if q.value == "" {
-		return st.accent.Render(q.prompt) + cursor + st.faint.Render(q.placeholder)
+		return prompt.Render(q.prompt) + block + placeholder.Render(q.placeholder)
 	}
-	return st.accent.Render(q.prompt) + st.fg.Render(q.value) + cursor
+	return prompt.Render(q.prompt) + text.Render(q.value) + block
 }
 
 func (f *finder) scrollIntoView() {

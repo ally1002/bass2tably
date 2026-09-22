@@ -56,6 +56,7 @@ The layout adapts: in the `page` layout measures per line fit the terminal width
 | `m` | metronome click on the tab's beat grid, accented every four beats |
 | `<` `>` | playback speed 0.5×, 0.75×, 1× (a rate change: 0.5× also plays an octave down) |
 | `t` | next theme |
+| `ctrl+p` or `:` | command palette: type to filter every action by name, `enter` runs it |
 | `?` | expand the help footer |
 | `esc` | back to the file picker |
 | `q` | quit |

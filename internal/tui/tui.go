@@ -63,25 +63,11 @@ type viewerKeys struct {
 	Click      key.Binding
 	Slower     key.Binding
 	Faster     key.Binding
+	Palette    key.Binding
 	Theme      key.Binding
 	Back       key.Binding
 	Help       key.Binding
 	Quit       key.Binding
-}
-
-func (k viewerKeys) ShortHelp() []key.Binding {
-	return []key.Binding{k.PlayPause, k.Notes, k.Theme, k.Help, k.Quit}
-}
-
-func (k viewerKeys) FullHelp() [][]key.Binding {
-	return [][]key.Binding{
-		{k.PlayPause, k.PlayFrom, k.SeekBack, k.SeekFwd},
-		{k.Up, k.Down, k.Left, k.Right, k.Top, k.Bottom},
-		{k.Notes, k.PanelSide, k.PanelGrow, k.PanelShrnk},
-		{k.Fewer, k.More, k.AutoFit, k.Zoom, k.Rhythm, k.ViewMode},
-		{k.LoopA, k.LoopB, k.LoopClear, k.Click, k.Slower, k.Faster},
-		{k.Theme, k.Help, k.Back, k.Quit},
-	}
 }
 
 func defaultViewerKeys() viewerKeys {
@@ -106,6 +92,7 @@ func defaultViewerKeys() viewerKeys {
 		Click:      key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "metronome")),
 		Slower:     key.NewBinding(key.WithKeys("<"), key.WithHelp("<", "slower")),
 		Faster:     key.NewBinding(key.WithKeys(">"), key.WithHelp(">", "faster")),
+		Palette:    key.NewBinding(key.WithKeys("ctrl+p", ":"), key.WithHelp("ctrl+p", "commands")),
 		Theme:      key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "theme")),
 		Up:         key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
 		Down:       key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
@@ -150,6 +137,7 @@ type model struct {
 	rhythm      bool
 	wave        []float64
 	mode        viewMode
+	palette     cmdPalette
 	loopA       int
 	loopB       int
 	metronome   bool
@@ -254,7 +242,7 @@ func (m model) Init() tea.Cmd {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
-		inFinder := m.screen == pickerScreen
+		inFinder := m.screen == pickerScreen || m.palette.open
 		switch s := msg.String(); {
 		case s == "ctrl+c", s == "q" && !inFinder:
 			m.closePlayer()
@@ -290,7 +278,7 @@ const (
 
 func (m *model) resizeViewer() {
 	w := m.w
-	h := m.h - 3 - lipgloss.Height(m.help.View(m.keys))
+	h := m.h - 3 - lipgloss.Height(m.help.View(m.helpMap()))
 	if w < 1 {
 		w = 1
 	}
@@ -525,104 +513,11 @@ func (m model) updateViewer(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refreshCursor()
 		return m, tickCmd(m.tickGen)
 	case tea.KeyPressMsg:
-		switch {
-		case key.Matches(msg, m.keys.PlayPause):
-			return m.togglePlayback()
-		case key.Matches(msg, m.keys.SeekBack):
-			m.seekMeasures(-1)
-			return m, nil
-		case key.Matches(msg, m.keys.SeekFwd):
-			m.seekMeasures(+1)
-			return m, nil
-		case key.Matches(msg, m.keys.Notes):
-			m.toggleNotes()
-			return m, nil
-		case key.Matches(msg, m.keys.PanelSide):
-			m.togglePanelSide()
-			return m, nil
-		case key.Matches(msg, m.keys.PanelGrow):
-			m.resizePanel(+1)
-			return m, nil
-		case key.Matches(msg, m.keys.PanelShrnk):
-			m.resizePanel(-1)
-			return m, nil
-		case key.Matches(msg, m.keys.Fewer):
-			m.setMeasuresPerLine(-1)
-			return m, nil
-		case key.Matches(msg, m.keys.More):
-			m.setMeasuresPerLine(+1)
-			return m, nil
-		case key.Matches(msg, m.keys.AutoFit):
-			if m.mode == pageMode {
-				m.mpl = 0
-				m.rebuild()
-			}
-			return m, nil
-		case key.Matches(msg, m.keys.ViewMode):
-			m.toggleMode()
-			return m, nil
-		case key.Matches(msg, m.keys.LoopA):
-			m.setLoopA()
-			return m, nil
-		case key.Matches(msg, m.keys.LoopB):
-			m.setLoopB()
-			return m, nil
-		case key.Matches(msg, m.keys.LoopClear):
-			m.clearLoop()
-			return m, nil
-		case key.Matches(msg, m.keys.Click):
-			m.toggleClick()
-			return m, nil
-		case key.Matches(msg, m.keys.Slower):
-			m.stepSpeed(-1)
-			return m, nil
-		case key.Matches(msg, m.keys.Faster):
-			m.stepSpeed(1)
-			return m, nil
-		case key.Matches(msg, m.keys.Zoom):
-			m.cycleZoom()
-			return m, nil
-		case key.Matches(msg, m.keys.Rhythm):
-			m.rhythm = !m.rhythm
-			m.rebuild()
-			return m, nil
-		case key.Matches(msg, m.keys.Help):
-			m.help.ShowAll = !m.help.ShowAll
-			m.resizeViewer()
-			return m, nil
-		case key.Matches(msg, m.keys.Back):
-			m.closePlayer()
-			m.screen = pickerScreen
-			m.res = nil
-			m.wave = nil
-			m.path = ""
-			return m, m.finder.Init()
+		if m.palette.open {
+			return m, m.updatePalette(msg)
 		}
-		if m.notes.open {
-			switch {
-			case key.Matches(msg, m.keys.Up):
-				m.selectNote(m.notes.sel - 1)
-				return m, nil
-			case key.Matches(msg, m.keys.Down):
-				m.selectNote(m.notes.sel + 1)
-				return m, nil
-			case key.Matches(msg, m.keys.Top):
-				m.selectNote(0)
-				return m, nil
-			case key.Matches(msg, m.keys.Bottom):
-				m.selectNote(len(m.notes.rows) - 1)
-				return m, nil
-			case key.Matches(msg, m.keys.PlayFrom):
-				return m.playFromSelection()
-			}
-		}
-		switch {
-		case key.Matches(msg, m.keys.Top):
-			m.vp.GotoTop()
-			return m, nil
-		case key.Matches(msg, m.keys.Bottom):
-			m.vp.GotoBottom()
-			return m, nil
+		if cmd, ok := m.runKey(msg); ok {
+			return m, cmd
 		}
 	}
 	var cmd tea.Cmd
@@ -1026,11 +921,15 @@ func (m model) viewerView() string {
 				lipgloss.NewStyle().Height(m.notes.height).MaxHeight(m.notes.height).Render(m.notes.View(m.st))
 		}
 	}
-	return m.headerView() + "\n" + body + "\n" + m.waveView() + "\n" + m.statusView() + "\n" + m.helpView()
+	screen := m.headerView() + "\n" + body + "\n" + m.waveView() + "\n" + m.statusView() + "\n" + m.helpView()
+	if m.palette.open {
+		return m.overlay(screen, m.paletteView())
+	}
+	return screen
 }
 
 func (m model) helpView() string {
-	lines := strings.Split(m.help.View(m.keys), "\n")
+	lines := strings.Split(m.help.View(m.helpMap()), "\n")
 	for i, line := range lines {
 		lines[i] = ansi.Truncate(line, max(m.w, 1), "")
 	}
