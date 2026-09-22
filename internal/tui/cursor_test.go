@@ -33,11 +33,14 @@ func tuiLayout(sh tab.Sheet) tab.Layout {
 	return l
 }
 
-func stripRulers(rendered string, l tab.Layout) string {
+var noRhythm rhythmOpts
+
+func stripChrome(rendered string, l tab.Layout) string {
 	lines := strings.Split(ansi.Strip(rendered), "\n")
 	kept := lines[:0]
 	for r, line := range lines {
-		if r%l.Stride() != 0 {
+		rr := r % l.Stride()
+		if (rr >= l.Top && rr < l.Top+l.Rows) || rr == l.Stride()-1 {
 			kept = append(kept, line)
 		}
 	}
@@ -53,15 +56,15 @@ func TestRenderSheetStripsToText(t *testing.T) {
 		want := sh.Text(tab.Unicode)
 		for _, n := range notes {
 			for _, shading := range []bool{false, true} {
-				if got := stripRulers(renderSheet(sh, tab.Unicode, st, n.Slot, shading), l); got != want {
+				if got := stripChrome(renderSheet(sh, tab.Unicode, st, n.Slot, shading, noRhythm), l); got != want {
 					t.Fatalf("cellW %d slot %d shading %v: stripped render differs from Text(Unicode)\ngot:\n%s\nwant:\n%s", cellW, n.Slot, shading, got, want)
 				}
 			}
 		}
-		if got := stripRulers(renderSheet(sh, tab.Unicode, st, -1, false), l); got != want {
+		if got := stripChrome(renderSheet(sh, tab.Unicode, st, -1, false, noRhythm), l); got != want {
 			t.Fatalf("cellW %d: stripped render without cursor differs from Text(Unicode)", cellW)
 		}
-		if got := stripRulers(renderSheet(sh, tab.ASCII, st, -1, false), l); got != sh.Text(tab.ASCII) {
+		if got := stripChrome(renderSheet(sh, tab.ASCII, st, -1, false, noRhythm), l); got != sh.Text(tab.ASCII) {
 			t.Fatalf("cellW %d: stripped ASCII render differs from Text(ASCII)", cellW)
 		}
 	}
@@ -73,7 +76,7 @@ func TestRenderSheetCursorOnce(t *testing.T) {
 	sh := tab.Build(notes, frets, fixtureTuning, 4, 4, 3)
 	l := tuiLayout(sh)
 	out := func(cur int) []string {
-		return strings.Split(renderSheet(sh, tab.Unicode, st, cur, false), "\n")
+		return strings.Split(renderSheet(sh, tab.Unicode, st, cur, false, noRhythm), "\n")
 	}
 	for i, n := range notes {
 		block, _ := l.SlotCell(n.Slot)

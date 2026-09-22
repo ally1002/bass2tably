@@ -18,8 +18,8 @@ func TestShadingDimsPlayedOnly(t *testing.T) {
 	sh := tab.Build(res.Notes, res.Frets, fixtureTuning, res.GridDiv, 4, 3)
 	l := tuiLayout(sh)
 	cur := res.Notes[2].Slot
-	shadedRows := strings.Split(renderSheet(sh, tab.Unicode, st, cur, true), "\n")
-	unshadedRows := strings.Split(renderSheet(sh, tab.Unicode, st, cur, false), "\n")
+	shadedRows := strings.Split(renderSheet(sh, tab.Unicode, st, cur, true, noRhythm), "\n")
+	unshadedRows := strings.Split(renderSheet(sh, tab.Unicode, st, cur, false, noRhythm), "\n")
 	for i, n := range res.Notes {
 		s := res.Frets[i].String
 		block, _ := l.SlotCell(n.Slot)
@@ -49,7 +49,7 @@ func TestSustainsUseStringShade(t *testing.T) {
 	res := testResult(t)
 	st := testStyles()
 	sh := tab.Build(res.Notes, res.Frets, fixtureTuning, res.GridDiv, 4, 3)
-	out := renderSheet(sh, tab.Unicode, st, -1, false)
+	out := renderSheet(sh, tab.Unicode, st, -1, false, noRhythm)
 	s := res.Frets[0].String
 	if !strings.Contains(out, st.sustain(s).Render(strings.Repeat("═", 9))) {
 		t.Fatal("a three-slot sustain is not one run in the string's sustain shade")
@@ -101,7 +101,7 @@ func TestRulerNumbersMeasures(t *testing.T) {
 	if l.Measures != 6 || len(sh.Systems) != 2 {
 		t.Fatalf("Measures %d, systems %d, want 6 and 2", l.Measures, len(sh.Systems))
 	}
-	lines := strings.Split(ansi.Strip(renderSheet(sh, tab.Unicode, testStyles(), 0, false)), "\n")
+	lines := strings.Split(ansi.Strip(renderSheet(sh, tab.Unicode, testStyles(), 0, false, noRhythm)), "\n")
 	fieldW := l.SlotsPerMeasure*l.CellW + 1
 	check := func(row int, first, count int) {
 		t.Helper()
@@ -137,11 +137,11 @@ func TestRulerHighlightsCurrentMeasure(t *testing.T) {
 	st := testStyles()
 	sh := tab.Build(res.Notes, res.Frets, fixtureTuning, res.GridDiv, 4, 3)
 	fieldW := sh.SlotsPerMeasure*sh.CellW + 1
-	out := renderSheet(sh, tab.Unicode, st, 0, false)
+	out := renderSheet(sh, tab.Unicode, st, 0, false, noRhythm)
 	if !strings.Contains(out, st.rulerCur.Render("1"+strings.Repeat(" ", fieldW-1))) {
 		t.Fatal("measure 1 is not highlighted while the cursor is inside it")
 	}
-	if strings.Contains(renderSheet(sh, tab.Unicode, st, -1, false), st.rulerCur.Render("1"+strings.Repeat(" ", fieldW-1))) {
+	if strings.Contains(renderSheet(sh, tab.Unicode, st, -1, false, noRhythm), st.rulerCur.Render("1"+strings.Repeat(" ", fieldW-1))) {
 		t.Fatal("a measure is highlighted with no cursor")
 	}
 }

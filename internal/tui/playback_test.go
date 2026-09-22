@@ -24,7 +24,7 @@ func TestDeviceInitFailureKeepsViewerUsable(t *testing.T) {
 	if m.audioErr != wantErr {
 		t.Fatalf("audioErr = %v, want %v", m.audioErr, wantErr)
 	}
-	if got, want := stripRulers(m.vp.GetContent(), m.res.Layout), m.sheet.Text(tab.Unicode); got != want {
+	if got, want := stripChrome(m.vp.GetContent(), m.res.Layout), m.sheet.Text(tab.Unicode); got != want {
 		t.Fatalf("tab content = %q, want %q", got, want)
 	}
 	if view := ansi.Strip(m.viewerView()); !containsAll(view, "playback unavailable", wantErr.Error()) {

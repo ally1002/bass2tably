@@ -23,8 +23,8 @@ func newPaint(st lipgloss.Style) paint {
 }
 
 type paints struct {
-	name, fret, sustain                                    []paint
-	bar, dash, cursor, cursorDash, played, ruler, rulerCur paint
+	name, fret, sustain                                           []paint
+	bar, dash, cursor, cursorDash, played, ruler, rulerCur, frame paint
 }
 
 func newPaints(st styles, rows int) paints {
@@ -36,6 +36,7 @@ func newPaints(st styles, rows int) paints {
 		played:     newPaint(st.played),
 		ruler:      newPaint(st.ruler),
 		rulerCur:   newPaint(st.rulerCur),
+		frame:      newPaint(st.frame),
 	}
 	for s := 0; s < rows; s++ {
 		p.name = append(p.name, newPaint(st.name(s)))
@@ -74,7 +75,7 @@ func (w *runWriter) String() string {
 	return w.b.String()
 }
 
-func renderSheet(sh tab.Sheet, g tab.Glyphs, st styles, cur int, shading bool) string {
+func renderSheet(sh tab.Sheet, g tab.Glyphs, st styles, cur int, shading bool, rh rhythmOpts) string {
 	var b strings.Builder
 	p := newPaints(st, sh.Rows)
 	last := len(sh.Systems) - 1
@@ -86,6 +87,12 @@ func renderSheet(sh tab.Sheet, g tab.Glyphs, st styles, cur int, shading bool) s
 		b.WriteString("\n")
 		for s := sh.Rows - 1; s >= 0; s-- {
 			b.WriteString(stringRow(sh, sys, s, g, p, cur, shading, si == last))
+			b.WriteString("\n")
+		}
+		for _, row := range systemRhythmRows(sh, sys, rh) {
+			b.WriteString(p.frame.pre)
+			b.WriteString(row)
+			b.WriteString(p.frame.post)
 			b.WriteString("\n")
 		}
 	}

@@ -55,6 +55,7 @@ type viewerKeys struct {
 	More       key.Binding
 	AutoFit    key.Binding
 	Zoom       key.Binding
+	Rhythm     key.Binding
 	Theme      key.Binding
 	Back       key.Binding
 	Help       key.Binding
@@ -70,7 +71,7 @@ func (k viewerKeys) FullHelp() [][]key.Binding {
 		{k.PlayPause, k.PlayFrom, k.SeekBack, k.SeekFwd},
 		{k.Up, k.Down, k.Left, k.Right, k.Top, k.Bottom},
 		{k.Notes, k.PanelSide, k.PanelGrow, k.PanelShrnk, k.Fewer, k.More},
-		{k.AutoFit, k.Zoom, k.Theme, k.Help, k.Back, k.Quit},
+		{k.AutoFit, k.Zoom, k.Rhythm, k.Theme, k.Help, k.Back, k.Quit},
 	}
 }
 
@@ -88,6 +89,7 @@ func defaultViewerKeys() viewerKeys {
 		More:       key.NewBinding(key.WithKeys("]"), key.WithHelp("]", "more per line")),
 		AutoFit:    key.NewBinding(key.WithKeys("0"), key.WithHelp("0", "fit to width")),
 		Zoom:       key.NewBinding(key.WithKeys("z"), key.WithHelp("z", "zoom")),
+		Rhythm:     key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "rhythm rows")),
 		Theme:      key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "theme")),
 		Up:         key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
 		Down:       key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
@@ -129,6 +131,7 @@ type model struct {
 	sheet       tab.Sheet
 	cellW       int
 	glyphs      tab.Glyphs
+	rhythm      bool
 }
 
 const defaultCellW = 3
@@ -146,6 +149,7 @@ func newModel(path string, opts app.Options) model {
 		dark:      true,
 		cellW:     defaultCellW,
 		glyphs:    tab.Unicode,
+		rhythm:    true,
 	}
 	m.vp.KeyMap.PageDown.SetKeys("pgdown", "f")
 	m.vp.SetHorizontalStep(4)
@@ -326,9 +330,21 @@ func (m *model) rebuild() {
 	m.sheet = tab.Build(m.res.Notes, m.res.Frets, m.res.Tuning, m.res.GridDiv, mpl, m.cellW)
 	l = m.sheet.Layout()
 	l.Top = 1
+	l.Bottom = m.rhythmOpts().rows()
 	m.res.Layout = l
 	m.refreshCursor()
 	m.ensureCursorVisible()
+}
+
+func (m model) rhythmOpts() rhythmOpts {
+	r := rhythmOpts{gridDiv: m.res.GridDiv, glyphs: rhythmUnicode, on: m.rhythm}
+	if m.glyphs == tab.ASCII {
+		r.glyphs = rhythmASCII
+	}
+	if anyShorterThanBeat(m.sheet, r.gridDiv) {
+		r.levels = beamLevels(r.gridDiv)
+	}
+	return r
 }
 
 func (m *model) cycleZoom() {
@@ -472,6 +488,10 @@ func (m model) updateViewer(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case key.Matches(msg, m.keys.Zoom):
 			m.cycleZoom()
+			return m, nil
+		case key.Matches(msg, m.keys.Rhythm):
+			m.rhythm = !m.rhythm
+			m.rebuild()
 			return m, nil
 		case key.Matches(msg, m.keys.Help):
 			m.help.ShowAll = !m.help.ShowAll
@@ -648,7 +668,7 @@ func (m *model) setTabContent() {
 	if len(m.res.Notes) > 0 {
 		cur = m.curSlot
 	}
-	m.vp.SetContent(renderSheet(m.sheet, m.glyphs, m.st, cur, m.shading()))
+	m.vp.SetContent(renderSheet(m.sheet, m.glyphs, m.st, cur, m.shading(), m.rhythmOpts()))
 }
 
 func (m model) shading() bool {

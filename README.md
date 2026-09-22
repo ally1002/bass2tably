@@ -31,7 +31,7 @@ With `--out`, also a `.mid` file (960 TPQN, GM Electric Bass finger).
 
 ## TUI
 
-The viewer draws the tab with box-drawing lines: a note's sustain runs as `═` for its length in the string's colour, a note held across a bar line reopens the next measure as `(3)`, a ruler above each system numbers the measures, notes already behind the playhead are dimmed and the current column is highlighted. It keeps a transport bar (time, progress, measure and beat) under the header. Terminals without box-drawing glyphs get the plain ASCII tab with `--ascii`. Three themes ship, each with a light and a dark variant chosen from the terminal background: `amber` (warm, tube-amp glow), `neon` (one colour per string, like coated string sets) and `ink` (monochrome). Pick one with `--theme` or cycle with `t`.
+The viewer draws the tab with box-drawing lines: a note's sustain runs as `═` for its length in the string's colour, a note held across a bar line reopens the next measure as `(3)`, a ruler above each system numbers the measures, notes already behind the playhead are dimmed and the current column is highlighted. Under each system a stem row marks every attack with `│` and every rest with `·`, and one or two beam rows group the notes shorter than a beat within their beat, as engraved rhythm does: `└───┘` is a pair of eighths, `└─┴─┴─┘` four sixteenths, `└─` a lone short note. It keeps a transport bar (time, progress, measure and beat) under the header. Terminals without box-drawing glyphs get the plain ASCII tab with `--ascii`. Three themes ship, each with a light and a dark variant chosen from the terminal background: `amber` (warm, tube-amp glow), `neon` (one colour per string, like coated string sets) and `ink` (monochrome). Pick one with `--theme` or cycle with `t`.
 
 The layout adapts: measures per line fit the terminal width by default and can be forced with `[` and `]`; the note list docks at the bottom or on the right and can be resized.
 
@@ -49,6 +49,7 @@ The layout adapts: measures per line fit the terminal width by default and can b
 | `[` `]` | fewer / more measures per line |
 | `0` | fit measures per line to the terminal width again |
 | `z` | cycle the cell width (zoom): 2, 3 or 4 columns per grid slot |
+| `r` | show or hide the rhythm rows under each system |
 | `t` | next theme |
 | `?` | expand the help footer |
 | `esc` | back to the file picker |

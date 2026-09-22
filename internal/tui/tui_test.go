@@ -44,7 +44,7 @@ func TestAnalysisDoneShowsViewer(t *testing.T) {
 		t.Fatalf("res not stored")
 	}
 	want := m.sheet.Text(tab.Unicode)
-	if got := stripRulers(m.vp.GetContent(), m.res.Layout); got != want {
+	if got := stripChrome(m.vp.GetContent(), m.res.Layout); got != want {
 		t.Fatalf("viewport content = %q, want %q", got, want)
 	}
 	if m.res.Layout.Top != 1 || m.res.Layout.CellW != defaultCellW {
@@ -62,7 +62,7 @@ func TestASCIIConfigUsesASCIIGlyphs(t *testing.T) {
 	res := testResult(t)
 	res.Samples = nil
 	m, _ = advance(t, m, analysisDoneMsg{res})
-	if got := stripRulers(m.vp.GetContent(), m.res.Layout); got != m.sheet.Text(tab.ASCII) {
+	if got := stripChrome(m.vp.GetContent(), m.res.Layout); got != m.sheet.Text(tab.ASCII) {
 		t.Fatalf("viewport content = %q, want the ASCII text", got)
 	}
 }
