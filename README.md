@@ -1,6 +1,6 @@
 # bass2tably
 
-Turns a bass recording into an ASCII bass tab in the terminal — either printed once, or in an interactive TUI that plays the audio back with a cursor running over the tab. Optionally writes a Standard MIDI File too, so riffs never get forgotten again.
+Turns a bass recording into an ASCII bass tab in the terminal — either printed once, or in an interactive TUI that plays the audio back with a cursor running over the tab. Optionally writes a Standard MIDI File or a Guitar Pro 5 file too, so riffs never get forgotten again.
 
 Pure Go DSP (pitch from YIN's period candidates ranked by a two-way harmonic mismatch against the note's spectrum, onsets from a broadband energy envelope unioned with high-frequency spectral flux), no machine learning. Audio playback uses miniaudio through cgo; non-WAV input is decoded with the system `ffmpeg`.
 
@@ -19,6 +19,7 @@ bass2tably --bpm 90 riff.wav      # print the tab and note list and exit
 | `--grid` | `16` | quantization grid: finest note value is an eighth (8) or sixteenth (16) |
 | `--position` | `0` | bias fret assignment toward this neck position |
 | `--out` | (none) | write a MIDI file to this path; no MIDI is written if omitted |
+| `--gp` | (none) | write a Guitar Pro 5 file to this path; nothing is written if omitted |
 | `--tui` | off | open the TUI for the given file |
 | `--theme` | `amber` | TUI colour theme: `amber`, `neon` or `ink` |
 
@@ -27,6 +28,7 @@ Input can be WAV, or any format `ffmpeg` reads (`.m4a`, `.mp3`, `.ogg`, `.flac`)
 Output: an ASCII tab (16 slots per measure, 4 measures per line) and a per-note list
 (`#1    0.02s  A1   string A fret 0   [also: E fret 5, B fret 10]  1/2 beat`).
 With `--out`, also a `.mid` file (960 TPQN, GM Electric Bass finger).
+With `--gp`, also a Guitar Pro 5 file: one bass track, 4/4, the tab's strings and frets, for import into Guitar Pro, TuxGuitar, MuseScore or Songsterr's Upload.
 
 ## TUI
 
