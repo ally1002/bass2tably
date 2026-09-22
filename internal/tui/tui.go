@@ -132,6 +132,7 @@ type model struct {
 	cellW       int
 	glyphs      tab.Glyphs
 	rhythm      bool
+	wave        []float64
 }
 
 const defaultCellW = 3
@@ -248,12 +249,15 @@ const (
 
 func (m *model) resizeViewer() {
 	w := m.w
-	h := m.h - 2 - lipgloss.Height(m.help.View(m.keys))
+	h := m.h - 3 - lipgloss.Height(m.help.View(m.keys))
 	if w < 1 {
 		w = 1
 	}
 	if h < 1 {
 		h = 1
+	}
+	if m.res != nil && len(m.res.Samples) > 0 && len(m.wave) != m.w {
+		m.wave = peaks(m.res.Samples, m.w)
 	}
 	if m.notes.open {
 		switch m.notes.side {
@@ -414,6 +418,7 @@ func (m model) updateAnalyzing(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.curSlot = 0
 		m.curPos = 0
 		m.mpl = 0
+		m.wave = nil
 		m.vp.GotoTop()
 		m.vp.SetXOffset(0)
 		m.resizeViewer()
@@ -501,6 +506,7 @@ func (m model) updateViewer(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.closePlayer()
 			m.screen = pickerScreen
 			m.res = nil
+			m.wave = nil
 			m.path = ""
 			return m, m.picker.Init()
 		}
@@ -785,17 +791,12 @@ func (m model) hint(pairs [][2]string) string {
 }
 
 func (m model) analyzingView() string {
-	card := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(m.st.pal.frame).
-		Padding(1, 3)
-	body := m.spin.View() + " " + m.st.title.Render("analyzing") + "\n" +
-		m.st.accent.Render(filepath.Base(m.path)) + "\n\n" +
+	body := m.spin.View() + " " + m.st.title.Render("analyzing ") + m.st.accent.Render(filepath.Base(m.path)) + "\n" +
 		m.st.muted.Render("onsets · tempo · pitch candidates")
 	if m.w == 0 || m.h == 0 {
-		return card.Render(body)
+		return body
 	}
-	return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, card.Render(body))
+	return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, body)
 }
 
 func fmtTime(sec float64) string {
@@ -817,29 +818,15 @@ func (m model) tuningName() string {
 
 func (m model) headerView() string {
 	w := max(m.w, 1)
-	bpm := fmt.Sprintf("%.1f", m.res.BPM)
-	if m.res.BPMEstimated {
-		bpm = "~" + bpm
-	}
-	sep := m.st.faint.Render("  ·  ")
-	stat := func(v, unit string) string {
-		return m.st.fg.Render(v) + " " + m.st.muted.Render(unit)
-	}
 	name := m.brand() + " " + m.st.title.Render(" "+filepath.Base(m.res.Path))
-	grid := fmt.Sprintf("1/%d", m.res.GridDiv*4)
-	notes := fmt.Sprint(len(m.res.Notes))
-	full := name + sep + stat(bpm, "bpm") + sep + stat(grid, "grid") +
-		sep + stat(m.tuningName(), "tuning") + sep + stat(notes, "notes")
-	compact := name + sep + stat(bpm, "bpm") + sep + m.st.fg.Render(grid) +
-		sep + m.st.fg.Render(m.tuningName()) + sep + stat(notes, "notes")
-	right := m.st.muted.Render(m.st.themeName) + " " + m.st.faint.Render(m.st.themeTag) + " "
-	if lipgloss.Width(full)+lipgloss.Width(right)+1 <= w {
-		return m.spread(full, right, w)
+	sep := m.st.faint.Render(" · ")
+	rhythm := "rhythm off"
+	if m.rhythm {
+		rhythm = "rhythm"
 	}
-	if lipgloss.Width(compact) <= w {
-		return m.spread(compact, right, w)
-	}
-	return ansi.Truncate(name+sep+stat(bpm, "bpm")+sep+stat(notes, "notes"), w, "…")
+	right := m.st.muted.Render(fmt.Sprintf("×%d", m.res.Layout.CellW)) + sep +
+		m.st.muted.Render(rhythm) + sep + m.st.muted.Render("page") + " "
+	return m.spread(name, right, w)
 }
 
 func (m model) spread(left, right string, w int) string {
@@ -850,40 +837,68 @@ func (m model) spread(left, right string, w int) string {
 	return left + strings.Repeat(" ", w-lw-rw) + right
 }
 
-func (m model) transportView() string {
+func (m model) waveView() string {
 	w := max(m.w, 1)
+	if len(m.wave) == 0 {
+		return blankRow(w)
+	}
+	frac := 0.0
+	if d := m.res.DurationSec; d > 0 {
+		frac = m.curPos / d
+	}
+	return waveRow(m.wave, frac, m.st, m.glyphs == tab.ASCII)
+}
+
+func (m model) statusView() string {
+	w := max(m.w, 1)
+	on := m.st.onBand
+	sp := func(n int) string { return on(m.st.fg).Render(strings.Repeat(" ", n)) }
+	sep := on(m.st.faint).Render(" · ")
+	var left string
 	if m.audioErr != nil {
-		return ansi.Truncate(" "+m.st.danger.Render("⊘ playback unavailable: "+m.audioErr.Error()), w, "…")
-	}
-	icon := m.st.muted.Render("■")
-	switch {
-	case m.playing():
-		icon = m.st.accent.Render("▶")
-	case m.player != nil:
-		icon = m.st.fg.Render("❚❚")
-	}
-	dur := m.res.DurationSec
-	clock := m.st.fg.Bold(true).Render(fmtTime(m.curPos)) + m.st.faint.Render(" / ") + m.st.muted.Render(fmtTime(dur))
-	measure := m.curSlot/m.res.Layout.SlotsPerMeasure + 1
-	beat := (m.curSlot%m.res.Layout.SlotsPerMeasure)/m.res.GridDiv + 1
-	pos := m.st.muted.Render("m ") + m.st.fg.Render(fmt.Sprintf("%d", measure)) +
-		m.st.faint.Render(fmt.Sprintf("/%d", m.res.Layout.Measures)) +
-		m.st.muted.Render("  beat ") + m.st.fg.Render(fmt.Sprint(beat)) +
-		m.st.faint.Render(fmt.Sprintf("   %d/line", m.res.Layout.MeasuresPerLine))
-	fixed := lipgloss.Width(icon) + lipgloss.Width(clock) + lipgloss.Width(pos) + 7
-	barW := w - fixed
-	bar := ""
-	if barW >= 8 {
-		frac := 0.0
-		if dur > 0 {
-			frac = m.curPos / dur
+		left = sp(1) + on(m.st.danger).Render("⊘ playback unavailable: "+m.audioErr.Error())
+	} else {
+		icon := on(m.st.muted).Render("■")
+		switch {
+		case m.playing():
+			icon = on(m.st.accent).Render("▶")
+		case m.player != nil:
+			icon = on(m.st.fg).Render("❚❚")
 		}
-		on := int(frac*float64(barW) + 0.5)
-		on = clamp(on, 0, barW)
-		bar = m.st.accent.Render(strings.Repeat("━", on)) + m.st.faint.Render(strings.Repeat("─", barW-on))
-		return " " + icon + " " + clock + "  " + bar + "  " + pos
+		clock := on(m.st.fg.Bold(true)).Render(fmtTime(m.curPos)) + on(m.st.faint).Render(" / ") +
+			on(m.st.muted).Render(fmtTime(m.res.DurationSec))
+		measure := m.curSlot/m.res.Layout.SlotsPerMeasure + 1
+		beat := (m.curSlot%m.res.Layout.SlotsPerMeasure)/m.res.GridDiv + 1
+		pos := on(m.st.muted).Render("m ") + on(m.st.fg).Render(fmt.Sprint(measure)) +
+			on(m.st.faint).Render(fmt.Sprintf("/%d", m.res.Layout.Measures)) +
+			on(m.st.muted).Render("  beat ") + on(m.st.fg).Render(fmt.Sprint(beat))
+		left = sp(1) + icon + sp(1) + clock + sp(3) + pos
 	}
-	return ansi.Truncate(" "+icon+" "+clock+"  "+pos, w, "…")
+	bpm := fmt.Sprintf("%.1f", m.res.BPM)
+	if m.res.BPMEstimated {
+		bpm = "~" + bpm
+	}
+	tempo := on(m.st.fg).Render(bpm+" ") + on(m.st.muted).Render("bpm")
+	theme := on(m.st.muted).Render(m.st.themeName + " ")
+	full := tempo + sep + on(m.st.fg).Render(m.tuningName()) + sep +
+		on(m.st.fg).Render(fmt.Sprintf("1/%d", m.res.GridDiv*4)) + sep +
+		on(m.st.fg).Render(fmt.Sprintf("%d/line", m.res.Layout.MeasuresPerLine)) + sep + theme
+	for _, right := range []string{full, tempo + sep + theme, ""} {
+		if lipgloss.Width(left)+lipgloss.Width(right)+1 <= w {
+			return m.bandLine(left, right, w)
+		}
+	}
+	return m.bandLine(left, "", w)
+}
+
+func (m model) bandLine(left, right string, w int) string {
+	fill := m.st.onBand(m.st.fg)
+	lw, rw := lipgloss.Width(left), lipgloss.Width(right)
+	if lw+rw+1 > w {
+		left = ansi.Truncate(left, max(w-1, 0), "") + fill.Render("…")
+		lw, right, rw = lipgloss.Width(left), "", 0
+	}
+	return left + fill.Render(strings.Repeat(" ", max(w-lw-rw, 0))) + right
 }
 
 func (m model) viewerView() string {
@@ -900,8 +915,17 @@ func (m model) viewerView() string {
 			panel = lipgloss.NewStyle().Width(m.notes.width).Height(m.vp.Height()).Render(panel)
 			body = lipgloss.JoinHorizontal(lipgloss.Top, tabView, border, panel)
 		default:
-			body += "\n" + m.rule(m.notes.header(m.st), m.w) + "\n" + m.notes.View(m.st)
+			body += "\n" + m.rule(m.notes.header(m.st), m.w) + "\n" +
+				lipgloss.NewStyle().Height(m.notes.height).Render(m.notes.View(m.st))
 		}
 	}
-	return m.headerView() + "\n" + m.transportView() + "\n" + body + "\n" + m.help.View(m.keys)
+	return m.headerView() + "\n" + body + "\n" + m.waveView() + "\n" + m.statusView() + "\n" + m.helpView()
+}
+
+func (m model) helpView() string {
+	lines := strings.Split(m.help.View(m.keys), "\n")
+	for i, line := range lines {
+		lines[i] = ansi.Truncate(line, max(m.w, 1), "")
+	}
+	return strings.Join(lines, "\n")
 }

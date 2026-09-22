@@ -211,3 +211,7 @@ func (st styles) sustain(s int) lipgloss.Style {
 	}
 	return st.sustains[s%len(st.sustains)]
 }
+
+func (st styles) onBand(s lipgloss.Style) lipgloss.Style {
+	return s.Background(st.pal.band)
+}
