@@ -64,6 +64,7 @@ func (m *model) actions() []action {
 		{"click", "Toggle the metronome", k.Click, hasPlayer, do((*model).toggleClick)},
 		{"slower", "Slower playback", k.Slower, hasPlayer, do(func(m *model) { m.stepSpeed(-1) })},
 		{"faster", "Faster playback", k.Faster, hasPlayer, do(func(m *model) { m.stepSpeed(+1) })},
+		{"export", "Export to Guitar Pro 5 / MIDI…", k.Export, always, do((*model).openExport)},
 		{"palette", "Command palette", k.Palette, always, do((*model).openPalette)},
 		{"theme", "Next theme", k.Theme, always, do((*model).cycleTheme)},
 		{"help", "Toggle the full help", k.Help, always, do(func(m *model) { m.help.ShowAll = !m.help.ShowAll; m.resizeViewer() })},
@@ -189,17 +190,33 @@ func (m *model) updatePalette(msg tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
+type card struct {
+	m model
+	w int
+}
+
+func (m model) newCard(width int) card {
+	return card{m: m, w: min(width, max(m.w-4, 20))}
+}
+
+func (c card) fill(n int) string {
+	return c.m.st.onBand(c.m.st.fg).Render(strings.Repeat(" ", max(n, 0)))
+}
+
+func (c card) blank() string { return c.fill(c.w) }
+
+func (c card) line(left, right string) string {
+	left = ansi.Truncate(left, max(c.w-2-lipgloss.Width(right)-1, 0), "…")
+	return c.fill(1) + left + c.fill(c.w-2-lipgloss.Width(left)-lipgloss.Width(right)) + right + c.fill(1)
+}
+
 func (m model) paletteView() string {
-	w := min(paletteWidth, max(m.w-4, 20))
+	c := m.newCard(paletteWidth)
 	on := m.st.onBand
-	fill := func(n int) string { return on(m.st.fg).Render(strings.Repeat(" ", max(n, 0))) }
-	line := func(left, right string) string {
-		left = ansi.Truncate(left, max(w-2-lipgloss.Width(right)-1, 0), "…")
-		return fill(1) + left + fill(w-2-lipgloss.Width(left)-lipgloss.Width(right)) + right + fill(1)
-	}
+	fill, line := c.fill, c.line
 	p := m.palette
 	input := p.input.view(on(m.st.accent), on(m.st.fg).Bold(true), on(m.st.muted), m.st.cursor)
-	rows := []string{fill(w), line(input, on(m.st.faint).Render("esc")), fill(w)}
+	rows := []string{c.blank(), line(input, on(m.st.faint).Render("esc")), c.blank()}
 	if len(p.hits) == 0 {
 		rows = append(rows, line(on(m.st.muted).Render("no command matches"), ""))
 	}
@@ -217,7 +234,7 @@ func (m model) paletteView() string {
 		}
 		rows = append(rows, line(mark+title.Render(a.title), keyStyle.Render(a.binding.Help().Key)))
 	}
-	rows = append(rows, fill(w))
+	rows = append(rows, c.blank())
 	return strings.Join(rows, "\n")
 }
 

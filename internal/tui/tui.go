@@ -29,6 +29,11 @@ const (
 type analysisDoneMsg struct{ res *app.Result }
 type analysisErrMsg struct{ err error }
 type clearErrMsg struct{}
+type flashMsg struct {
+	text string
+	err  bool
+}
+type clearFlashMsg struct{}
 type tickMsg struct{ gen int }
 
 type Config struct {
@@ -64,6 +69,7 @@ type viewerKeys struct {
 	Slower     key.Binding
 	Faster     key.Binding
 	Palette    key.Binding
+	Export     key.Binding
 	Theme      key.Binding
 	Back       key.Binding
 	Help       key.Binding
@@ -93,6 +99,7 @@ func defaultViewerKeys() viewerKeys {
 		Slower:     key.NewBinding(key.WithKeys("<"), key.WithHelp("<", "slower")),
 		Faster:     key.NewBinding(key.WithKeys(">"), key.WithHelp(">", "faster")),
 		Palette:    key.NewBinding(key.WithKeys("ctrl+p", ":"), key.WithHelp("ctrl+p", "commands")),
+		Export:     key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "export")),
 		Theme:      key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "theme")),
 		Up:         key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
 		Down:       key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
@@ -142,6 +149,9 @@ type model struct {
 	loopB       int
 	metronome   bool
 	speed       float64
+	flash       string
+	flashErr    bool
+	exp         exportDialog
 }
 
 type viewMode int
@@ -242,7 +252,7 @@ func (m model) Init() tea.Cmd {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
-		inFinder := m.screen == pickerScreen || m.palette.open
+		inFinder := m.screen == pickerScreen || m.palette.open || m.exp.open
 		switch s := msg.String(); {
 		case s == "ctrl+c", s == "q" && !inFinder:
 			m.closePlayer()
@@ -482,6 +492,12 @@ func (m model) updateAnalyzing(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) updateViewer(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case flashMsg:
+		m.flash, m.flashErr = msg.text, msg.err
+		return m, tea.Tick(3*time.Second, func(time.Time) tea.Msg { return clearFlashMsg{} })
+	case clearFlashMsg:
+		m.flash = ""
+		return m, nil
 	case tea.MouseClickMsg:
 		if msg.Button == tea.MouseLeft {
 			m.click(msg.X, msg.Y)
@@ -513,6 +529,9 @@ func (m model) updateViewer(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refreshCursor()
 		return m, tickCmd(m.tickGen)
 	case tea.KeyPressMsg:
+		if m.exp.open {
+			return m, m.updateExport(msg)
+		}
 		if m.palette.open {
 			return m, m.updatePalette(msg)
 		}
@@ -874,7 +893,7 @@ func (m model) statusView() string {
 		pos := on(m.st.muted).Render("m ") + on(m.st.fg).Render(fmt.Sprint(measure)) +
 			on(m.st.faint).Render(fmt.Sprintf("/%d", m.res.Layout.Measures)) +
 			on(m.st.muted).Render("  beat ") + on(m.st.fg).Render(fmt.Sprint(beat))
-		left = sp(1) + icon + sp(1) + clock + sp(3) + pos + m.practiceLabels(sp)
+		left = sp(1) + icon + sp(1) + clock + sp(3) + pos + m.practiceLabels(sp) + m.flashLabel(sp)
 	}
 	bpm := fmt.Sprintf("%.1f", m.res.BPM)
 	if m.res.BPMEstimated {
@@ -922,6 +941,9 @@ func (m model) viewerView() string {
 		}
 	}
 	screen := m.headerView() + "\n" + body + "\n" + m.waveView() + "\n" + m.statusView() + "\n" + m.helpView()
+	if m.exp.open {
+		return m.overlay(screen, m.exportView())
+	}
 	if m.palette.open {
 		return m.overlay(screen, m.paletteView())
 	}
@@ -1123,4 +1145,15 @@ func (m model) practiceLabels(sp func(int) string) string {
 		b.WriteString(sp(3) + on(m.st.accent).Render(label))
 	}
 	return b.String()
+}
+
+func (m model) flashLabel(sp func(int) string) string {
+	if m.flash == "" {
+		return ""
+	}
+	style := m.st.onBand(m.st.accent)
+	if m.flashErr {
+		style = m.st.onBand(m.st.danger)
+	}
+	return sp(3) + style.Render(m.flash)
 }
