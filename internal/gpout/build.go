@@ -1,0 +1,13 @@
+package gpout
+
+import (
+	"math"
+
+	"bass2tably/internal/music"
+	"bass2tably/internal/tab"
+)
+
+func Build(notes []music.Note, frets []tab.Fretting, tuning []int, gridDiv int, bpm float64, title string) (Score, Report) {
+	bars, rep := Bars(notes, frets, len(tuning), gridDiv)
+	return Score{Title: title, Tempo: int(math.Round(bpm)), Tuning: tuning, Bars: bars}, rep
+}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,7 +11,9 @@ import (
 
 	"bass2tably/internal/app"
 	"bass2tably/internal/dsp"
+	"bass2tably/internal/gpout"
 	"bass2tably/internal/music"
+	"bass2tably/internal/tab"
 	"bass2tably/internal/wavio"
 )
 
@@ -259,5 +262,36 @@ func TestUnifiedDiff(t *testing.T) {
 	want := "      a\n-2    b\n+2    x\n      c\n+4    d\n"
 	if got != want {
 		t.Errorf("unifiedDiff =\n%s\nwant\n%s", got, want)
+	}
+}
+
+func minimalScore() (gpout.Score, gpout.Report) {
+	notes := []music.Note{{Midi: 23, Slot: 0, Len: 4}, {Midi: 28, Slot: 4, Len: 4}, {Midi: 33, Slot: 8, Len: 4}, {Midi: 38, Slot: 12, Len: 4}}
+	frets := []tab.Fretting{{String: 0}, {String: 1}, {String: 2}, {String: 3}}
+	return gpout.Build(notes, frets, app.Tunings["BEADG"], 4, 100, "minimal")
+}
+
+func TestGoldenGP5(t *testing.T) {
+	res, err := app.Analyze(filepath.Join("testdata", "shh.wav"), app.Options{Tuning: "BEADG", Grid: 16})
+	if err != nil {
+		t.Fatal(err)
+	}
+	shh, _ := gpout.Build(res.Notes, res.Frets, res.Tuning, res.GridDiv, res.BPM, "shh")
+	mini, _ := minimalScore()
+	for name, score := range map[string]gpout.Score{"minimal": mini, "shh": shh} {
+		got := gpout.Encode(score)
+		want, err := os.ReadFile(filepath.Join("testdata", name+".gp5"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bytes.Equal(got, want) {
+			continue
+		}
+		i := 0
+		for i < len(got) && i < len(want) && got[i] == want[i] {
+			i++
+		}
+		ctx := func(b []byte) []byte { return b[max(0, i-8):min(len(b), i+8)] }
+		t.Errorf("%s.gp5: %d bytes, want %d; first difference at offset %d\n got  % x\n want % x", name, len(got), len(want), i, ctx(got), ctx(want))
 	}
 }
