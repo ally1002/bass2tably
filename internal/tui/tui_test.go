@@ -2,12 +2,14 @@ package tui
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"bass2tably/internal/app"
+	"bass2tably/internal/tab"
 )
 
 var testOpts = app.Options{Tuning: "BEADG", Grid: 16}
@@ -41,8 +43,27 @@ func TestAnalysisDoneShowsViewer(t *testing.T) {
 	if m.res != res {
 		t.Fatalf("res not stored")
 	}
-	if got := ansi.Strip(m.vp.GetContent()); got != res.Tab {
-		t.Fatalf("viewport content = %q, want %q", got, res.Tab)
+	want := m.sheet.Text(tab.Unicode)
+	if got := stripRulers(m.vp.GetContent(), m.res.Layout); got != want {
+		t.Fatalf("viewport content = %q, want %q", got, want)
+	}
+	if m.res.Layout.Top != 1 || m.res.Layout.CellW != defaultCellW {
+		t.Fatalf("Layout = %+v, want Top 1 and CellW %d", m.res.Layout, defaultCellW)
+	}
+	if strings.Contains(ansi.Strip(m.vp.GetContent()), "|") {
+		t.Fatal("viewer drew ASCII bars with the Unicode glyph set")
+	}
+}
+
+func TestASCIIConfigUsesASCIIGlyphs(t *testing.T) {
+	m := newModel("x.wav", testOpts)
+	m.glyphs = tab.ASCII
+	m, _ = advance(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+	res := testResult(t)
+	res.Samples = nil
+	m, _ = advance(t, m, analysisDoneMsg{res})
+	if got := stripRulers(m.vp.GetContent(), m.res.Layout); got != m.sheet.Text(tab.ASCII) {
+		t.Fatalf("viewport content = %q, want the ASCII text", got)
 	}
 }
 

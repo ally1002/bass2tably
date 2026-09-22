@@ -19,6 +19,7 @@ func main() {
 	out := flag.String("out", "", "write a MIDI file to this path (omit to skip MIDI output)")
 	tuiFlag := flag.Bool("tui", false, "open the TUI viewer for the given file")
 	theme := flag.String("theme", "amber", "TUI colour theme: "+strings.Join(tui.ThemeNames(), ", "))
+	ascii := flag.Bool("ascii", false, "TUI: draw the tab with ASCII only (no box-drawing glyphs)")
 	flag.Usage = func() {
 		fmt.Fprintf(flag.CommandLine.Output(), "usage: bass2tably [flags] [input.wav]\n")
 		flag.PrintDefaults()
@@ -27,7 +28,7 @@ func main() {
 
 	var err error
 	if *tuiFlag || flag.NArg() == 0 {
-		err = runTUI(*bpm, *tuning, *grid, *position, *theme, flag.Args())
+		err = runTUI(*bpm, *tuning, *grid, *position, *theme, *ascii, flag.Args())
 	} else {
 		err = run(*bpm, *tuning, *grid, *position, *out, flag.Args())
 	}
@@ -37,7 +38,7 @@ func main() {
 	}
 }
 
-func runTUI(bpm float64, tuning string, grid int, position float64, theme string, args []string) error {
+func runTUI(bpm float64, tuning string, grid int, position float64, theme string, ascii bool, args []string) error {
 	if len(args) > 1 {
 		return fmt.Errorf("expected at most one input file, got %d", len(args))
 	}
@@ -50,7 +51,7 @@ func runTUI(bpm float64, tuning string, grid int, position float64, theme string
 		Tuning:   tuning,
 		Grid:     grid,
 		Position: position,
-	}, tui.Config{Theme: theme})
+	}, tui.Config{Theme: theme, ASCII: ascii})
 }
 
 func run(bpm float64, tuning string, grid int, position float64, out string, args []string) error {

@@ -221,3 +221,13 @@ func (sh Sheet) CellText(col Column, s int, g Glyphs) string {
 		return strings.Repeat(g.Dash, sh.CellW)
 	}
 }
+
+func MinCellW(frets []Fretting) int {
+	w := 1
+	for _, f := range frets {
+		if f.String >= 0 {
+			w = max(w, len(strconv.Itoa(f.Fret))+1)
+		}
+	}
+	return w
+}

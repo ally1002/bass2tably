@@ -27,55 +27,90 @@ func cursorFixtureNotesFrets() ([]music.Note, []tab.Fretting) {
 
 func testStyles() styles { return newStyles(themes[0], true) }
 
-func TestRenderTabStripsBackToPlain(t *testing.T) {
-	notes, frets := cursorFixtureNotesFrets()
-	res := newResult(t, notes, frets, 100, 4, 0)
-	st := testStyles()
-	for _, n := range res.Notes {
-		block, col := res.Layout.SlotCell(n.Slot)
-		got := ansi.Strip(renderTab(res.Tab, res.Layout, st, block, col))
-		if got != res.Tab {
-			t.Fatalf("slot %d: stripped render differs from plain tab", n.Slot)
+func tuiLayout(sh tab.Sheet) tab.Layout {
+	l := sh.Layout()
+	l.Top = 1
+	return l
+}
+
+func stripRulers(rendered string, l tab.Layout) string {
+	lines := strings.Split(ansi.Strip(rendered), "\n")
+	kept := lines[:0]
+	for r, line := range lines {
+		if r%l.Stride() != 0 {
+			kept = append(kept, line)
 		}
 	}
-	if got := ansi.Strip(renderTab(res.Tab, res.Layout, st, -1, -1)); got != res.Tab {
-		t.Fatal("stripped render without cursor differs from plain tab")
+	return strings.Join(kept, "\n")
+}
+
+func TestRenderSheetStripsToText(t *testing.T) {
+	notes, frets := cursorFixtureNotesFrets()
+	st := testStyles()
+	for _, cellW := range []int{2, 3, 4} {
+		sh := tab.Build(notes, frets, fixtureTuning, 4, 4, cellW)
+		l := tuiLayout(sh)
+		want := sh.Text(tab.Unicode)
+		for _, n := range notes {
+			for _, shading := range []bool{false, true} {
+				if got := stripRulers(renderSheet(sh, tab.Unicode, st, n.Slot, shading), l); got != want {
+					t.Fatalf("cellW %d slot %d shading %v: stripped render differs from Text(Unicode)\ngot:\n%s\nwant:\n%s", cellW, n.Slot, shading, got, want)
+				}
+			}
+		}
+		if got := stripRulers(renderSheet(sh, tab.Unicode, st, -1, false), l); got != want {
+			t.Fatalf("cellW %d: stripped render without cursor differs from Text(Unicode)", cellW)
+		}
+		if got := stripRulers(renderSheet(sh, tab.ASCII, st, -1, false), l); got != sh.Text(tab.ASCII) {
+			t.Fatalf("cellW %d: stripped ASCII render differs from Text(ASCII)", cellW)
+		}
 	}
 }
 
-func TestRenderTabStylesOnlyCursorBlock(t *testing.T) {
+func TestRenderSheetCursorOnce(t *testing.T) {
 	notes, frets := cursorFixtureNotesFrets()
-	res := newResult(t, notes, frets, 100, 4, 0)
 	st := testStyles()
-	plain := strings.Split(res.Tab, "\n")
-	for i, n := range res.Notes[1:] {
-		block, col := res.Layout.SlotCell(n.Slot)
-		l := res.Layout
-		start := block * l.Stride()
-		fretRow := l.StringRow(block, frets[i+1].String)
-		cursorCell := st.cursor.Render(plain[fretRow][col : col+l.CellW])
-		out := strings.Split(renderTab(res.Tab, l, st, block, col), "\n")
+	sh := tab.Build(notes, frets, fixtureTuning, 4, 4, 3)
+	l := tuiLayout(sh)
+	out := func(cur int) []string {
+		return strings.Split(renderSheet(sh, tab.Unicode, st, cur, false), "\n")
+	}
+	for i, n := range notes {
+		block, _ := l.SlotCell(n.Slot)
+		fretRow := l.StringRow(block, frets[i].String)
+		lines := out(n.Slot)
+		cursorCell := st.cursor.Render(cellAt(sh, n.Slot, frets[i].String))
 		hits := 0
-		for r, line := range out {
-			has := strings.Contains(line, cursorCell)
-			inBlock := r >= start+l.Top && r < start+l.Top+l.Rows
-			if has && !inBlock {
-				t.Errorf("slot %d row %d: cursor style outside the cursor block", n.Slot, r)
+		for r, line := range lines {
+			if !strings.Contains(line, cursorCell) {
+				continue
 			}
-			if has {
-				hits++
+			hits++
+			if r != fretRow {
+				t.Errorf("slot %d: cursor style on row %d, want row %d", n.Slot, r, fretRow)
 			}
 		}
 		if hits != 1 {
-			t.Errorf("slot %d: fret cell styled as cursor on %d rows, want 1", n.Slot, hits)
+			t.Errorf("slot %d: fret cell styled as cursor %d times, want 1", n.Slot, hits)
 		}
 	}
+	for _, line := range out(-1) {
+		if strings.Contains(line, st.cursor.Render(cellAt(sh, 0, frets[0].String))) {
+			t.Fatal("cursor style drawn with no cursor")
+		}
+	}
+}
+
+func cellAt(sh tab.Sheet, slot, s int) string {
+	spm := sh.SlotsPerMeasure
+	col := sh.Systems[slot/spm/sh.MeasuresPerLine].Measures[slot/spm%sh.MeasuresPerLine].Columns[slot%spm]
+	return sh.CellText(col, s, tab.Unicode)
 }
 
 func TestFitMeasures(t *testing.T) {
 	notes, frets := cursorFixtureNotesFrets()
-	res := newResult(t, notes, frets, 100, 4, 0)
-	l := res.Layout
+	sh := tab.Build(notes, frets, fixtureTuning, 4, 4, 3)
+	l := sh.Layout()
 	mw := l.SlotsPerMeasure*l.CellW + 1
 	cases := map[int]int{
 		0:                      1,
@@ -85,7 +120,7 @@ func TestFitMeasures(t *testing.T) {
 		l.NameW + 1 + 100*mw:   l.Measures,
 	}
 	for w, want := range cases {
-		if got := fitMeasures(w, l); got != want {
+		if got := fitMeasures(w, l.NameW, l.CellW, l.SlotsPerMeasure, l.Measures); got != want {
 			t.Errorf("fitMeasures(%d) = %d, want %d", w, got, want)
 		}
 	}

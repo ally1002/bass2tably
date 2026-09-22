@@ -21,6 +21,7 @@ bass2tably --bpm 90 riff.wav      # print the tab and note list and exit
 | `--out` | (none) | write a MIDI file to this path; no MIDI is written if omitted |
 | `--tui` | off | open the TUI for the given file |
 | `--theme` | `amber` | TUI colour theme: `amber`, `neon` or `ink` |
+| `--ascii` | off | TUI: draw the tab with ASCII only, for terminals without box-drawing glyphs |
 
 Input can be WAV, or any format `ffmpeg` reads (`.m4a`, `.mp3`, `.ogg`, `.flac`).
 
@@ -30,7 +31,7 @@ With `--out`, also a `.mid` file (960 TPQN, GM Electric Bass finger).
 
 ## TUI
 
-The viewer colours each string, marks the playback position as a column through the tab, and keeps a transport bar (time, progress, measure and beat) under the header. Three themes ship, each with a light and a dark variant chosen from the terminal background: `amber` (warm, tube-amp glow), `neon` (one colour per string, like coated string sets) and `ink` (monochrome). Pick one with `--theme` or cycle with `t`.
+The viewer draws the tab with box-drawing lines: a note's sustain runs as `═` for its length in the string's colour, a note held across a bar line reopens the next measure as `(3)`, a ruler above each system numbers the measures, notes already behind the playhead are dimmed and the current column is highlighted. It keeps a transport bar (time, progress, measure and beat) under the header. Terminals without box-drawing glyphs get the plain ASCII tab with `--ascii`. Three themes ship, each with a light and a dark variant chosen from the terminal background: `amber` (warm, tube-amp glow), `neon` (one colour per string, like coated string sets) and `ink` (monochrome). Pick one with `--theme` or cycle with `t`.
 
 The layout adapts: measures per line fit the terminal width by default and can be forced with `[` and `]`; the note list docks at the bottom or on the right and can be resized.
 
@@ -47,6 +48,7 @@ The layout adapts: measures per line fit the terminal width by default and can b
 | `g` `G` | jump to top / bottom |
 | `[` `]` | fewer / more measures per line |
 | `0` | fit measures per line to the terminal width again |
+| `z` | cycle the cell width (zoom): 2, 3 or 4 columns per grid slot |
 | `t` | next theme |
 | `?` | expand the help footer |
 | `esc` | back to the file picker |

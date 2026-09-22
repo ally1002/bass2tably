@@ -33,6 +33,7 @@ type tickMsg struct{ gen int }
 
 type Config struct {
 	Theme string
+	ASCII bool
 }
 
 type viewerKeys struct {
@@ -53,6 +54,7 @@ type viewerKeys struct {
 	Fewer      key.Binding
 	More       key.Binding
 	AutoFit    key.Binding
+	Zoom       key.Binding
 	Theme      key.Binding
 	Back       key.Binding
 	Help       key.Binding
@@ -68,7 +70,7 @@ func (k viewerKeys) FullHelp() [][]key.Binding {
 		{k.PlayPause, k.PlayFrom, k.SeekBack, k.SeekFwd},
 		{k.Up, k.Down, k.Left, k.Right, k.Top, k.Bottom},
 		{k.Notes, k.PanelSide, k.PanelGrow, k.PanelShrnk, k.Fewer, k.More},
-		{k.AutoFit, k.Theme, k.Help, k.Back, k.Quit},
+		{k.AutoFit, k.Zoom, k.Theme, k.Help, k.Back, k.Quit},
 	}
 }
 
@@ -85,6 +87,7 @@ func defaultViewerKeys() viewerKeys {
 		Fewer:      key.NewBinding(key.WithKeys("["), key.WithHelp("[", "fewer per line")),
 		More:       key.NewBinding(key.WithKeys("]"), key.WithHelp("]", "more per line")),
 		AutoFit:    key.NewBinding(key.WithKeys("0"), key.WithHelp("0", "fit to width")),
+		Zoom:       key.NewBinding(key.WithKeys("z"), key.WithHelp("z", "zoom")),
 		Theme:      key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "theme")),
 		Up:         key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
 		Down:       key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
@@ -123,7 +126,12 @@ type model struct {
 	st          styles
 	mpl         int
 	panelSize   int
+	sheet       tab.Sheet
+	cellW       int
+	glyphs      tab.Glyphs
 }
+
+const defaultCellW = 3
 
 func newModel(path string, opts app.Options) model {
 	m := model{
@@ -136,6 +144,8 @@ func newModel(path string, opts app.Options) model {
 		path:      path,
 		newPlayer: newPlayer,
 		dark:      true,
+		cellW:     defaultCellW,
+		glyphs:    tab.Unicode,
 	}
 	m.vp.KeyMap.PageDown.SetKeys("pgdown", "f")
 	m.vp.SetHorizontalStep(4)
@@ -153,6 +163,9 @@ func Run(path string, opts app.Options, cfg Config) error {
 	}
 	m := newModel(path, opts)
 	m.themeIdx = idx
+	if cfg.ASCII {
+		m.glyphs = tab.ASCII
+	}
 	m.applyTheme()
 	_, err = tea.NewProgram(m).Run()
 	return err
@@ -266,7 +279,11 @@ func (m *model) resizeViewer() {
 		pickerErr = 1
 	}
 	m.picker.setSize(m.w, m.h-pickerFixed-pickerErr)
-	m.refitTab()
+	m.rebuild()
+}
+
+func (m model) cellWidth() int {
+	return max(m.cellW, tab.MinCellW(m.res.Frets))
 }
 
 func (m model) autoPanelWidth(w int) int {
@@ -274,8 +291,9 @@ func (m model) autoPanelWidth(w int) int {
 		return w * 2 / 5
 	}
 	l := m.res.Layout
-	n := fitMeasures(w-minPanelW-1, l)
-	tabW := l.NameW + 1 + n*(l.SlotsPerMeasure*l.CellW+1)
+	cellW := m.cellWidth()
+	n := fitMeasures(w-minPanelW-1, l.NameW, cellW, l.SlotsPerMeasure, l.Measures)
+	tabW := l.NameW + 1 + n*(l.SlotsPerMeasure*cellW+1)
 	return w - tabW - 1
 }
 
@@ -292,23 +310,33 @@ func clamp(v, lo, hi int) int {
 	return v
 }
 
-func (m *model) refitTab() {
+func (m *model) rebuild() {
 	if m.res == nil {
 		return
 	}
+	l := m.res.Layout
 	mpl := m.mpl
-	if mpl <= 0 {
-		if m.vp.Width() <= 1 {
-			return
-		}
-		mpl = fitMeasures(m.vp.Width(), m.res.Layout)
+	switch {
+	case mpl > 0:
+	case m.vp.Width() <= 1:
+		mpl = l.MeasuresPerLine
+	default:
+		mpl = fitMeasures(m.vp.Width(), l.NameW, m.cellWidth(), l.SlotsPerMeasure, l.Measures)
 	}
-	if mpl == m.res.Layout.MeasuresPerLine {
-		return
-	}
-	m.res.Tab, m.res.Layout = tab.RenderLayoutWidth(m.res.Notes, m.res.Frets, m.res.Tuning, m.res.GridDiv, mpl)
+	m.sheet = tab.Build(m.res.Notes, m.res.Frets, m.res.Tuning, m.res.GridDiv, mpl, m.cellW)
+	l = m.sheet.Layout()
+	l.Top = 1
+	m.res.Layout = l
 	m.refreshCursor()
 	m.ensureCursorVisible()
+}
+
+func (m *model) cycleZoom() {
+	m.cellW++
+	if m.cellW > 4 {
+		m.cellW = 2
+	}
+	m.rebuild()
 }
 
 func (m *model) setMeasuresPerLine(delta int) {
@@ -321,7 +349,7 @@ func (m *model) setMeasuresPerLine(delta int) {
 		return
 	}
 	m.mpl = next
-	m.refitTab()
+	m.rebuild()
 }
 
 func (m *model) resizePanel(delta int) {
@@ -440,7 +468,10 @@ func (m model) updateViewer(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case key.Matches(msg, m.keys.AutoFit):
 			m.mpl = 0
-			m.refitTab()
+			m.rebuild()
+			return m, nil
+		case key.Matches(msg, m.keys.Zoom):
+			m.cycleZoom()
 			return m, nil
 		case key.Matches(msg, m.keys.Help):
 			m.help.ShowAll = !m.help.ShowAll
@@ -613,11 +644,15 @@ func (m *model) setTabContent() {
 	if m.res == nil {
 		return
 	}
-	block, col := -1, -1
+	cur := -1
 	if len(m.res.Notes) > 0 {
-		block, col = m.res.Layout.SlotCell(m.curSlot)
+		cur = m.curSlot
 	}
-	m.vp.SetContent(renderTab(m.res.Tab, m.res.Layout, m.st, block, col))
+	m.vp.SetContent(renderSheet(m.sheet, m.glyphs, m.st, cur, m.shading()))
+}
+
+func (m model) shading() bool {
+	return m.curPos > 0
 }
 
 func (m *model) refreshCursor() {
