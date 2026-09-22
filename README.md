@@ -33,7 +33,7 @@ With `--out`, also a `.mid` file (960 TPQN, GM Electric Bass finger).
 
 The viewer draws the tab with box-drawing lines: a note's sustain runs as `═` for its length in the string's colour, a note held across a bar line reopens the next measure as `(3)`, a ruler above each system numbers the measures, notes already behind the playhead are dimmed and the current column is highlighted. Under each system a stem row marks every attack with `│` and every rest with `·`, and one or two beam rows group the notes shorter than a beat within their beat, as engraved rhythm does: `└───┘` is a pair of eighths, `└─┴─┴─┘` four sixteenths, `└─` a lone short note. Under the tab sits a waveform of the take with the playhead on it, and below that a status band with the clock, measure and beat on the left and the tempo, tuning, grid, measures per line and theme on the right. The header shows only the file, the zoom, and whether the rhythm rows are on. Terminals without box-drawing glyphs get the plain ASCII tab with `--ascii`. Three themes ship, each with a light and a dark variant chosen from the terminal background: `amber` (warm, tube-amp glow), `neon` (one colour per string, like coated string sets) and `ink` (monochrome). Pick one with `--theme` or cycle with `t`.
 
-The layout adapts: measures per line fit the terminal width by default and can be forced with `[` and `]`; the note list docks at the bottom or on the right and can be resized.
+The layout adapts: in the `page` layout measures per line fit the terminal width by default and can be forced with `[` and `]`; `v` switches to the `scroll` layout, one long system that follows the playhead sideways and keeps it a third of the way across the screen, the way a DAW does. The note list docks at the bottom or on the right and can be resized.
 
 | Key | Action |
 |---|---|
@@ -50,6 +50,7 @@ The layout adapts: measures per line fit the terminal width by default and can b
 | `0` | fit measures per line to the terminal width again |
 | `z` | cycle the cell width (zoom): 2, 3 or 4 columns per grid slot |
 | `r` | show or hide the rhythm rows under each system |
+| `v` | switch between the `page` layout (measures wrap to the width, for reading) and the `scroll` layout (one long system, the playhead pinned a third of the way in, for playing along) |
 | `t` | next theme |
 | `?` | expand the help footer |
 | `esc` | back to the file picker |

@@ -56,6 +56,7 @@ type viewerKeys struct {
 	AutoFit    key.Binding
 	Zoom       key.Binding
 	Rhythm     key.Binding
+	ViewMode   key.Binding
 	Theme      key.Binding
 	Back       key.Binding
 	Help       key.Binding
@@ -70,8 +71,9 @@ func (k viewerKeys) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.PlayPause, k.PlayFrom, k.SeekBack, k.SeekFwd},
 		{k.Up, k.Down, k.Left, k.Right, k.Top, k.Bottom},
-		{k.Notes, k.PanelSide, k.PanelGrow, k.PanelShrnk, k.Fewer, k.More},
-		{k.AutoFit, k.Zoom, k.Rhythm, k.Theme, k.Help, k.Back, k.Quit},
+		{k.Notes, k.PanelSide, k.PanelGrow, k.PanelShrnk},
+		{k.Fewer, k.More, k.AutoFit, k.Zoom, k.Rhythm, k.ViewMode},
+		{k.Theme, k.Help, k.Back, k.Quit},
 	}
 }
 
@@ -90,6 +92,7 @@ func defaultViewerKeys() viewerKeys {
 		AutoFit:    key.NewBinding(key.WithKeys("0"), key.WithHelp("0", "fit to width")),
 		Zoom:       key.NewBinding(key.WithKeys("z"), key.WithHelp("z", "zoom")),
 		Rhythm:     key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "rhythm rows")),
+		ViewMode:   key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "page/scroll")),
 		Theme:      key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "theme")),
 		Up:         key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
 		Down:       key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
@@ -133,6 +136,21 @@ type model struct {
 	glyphs      tab.Glyphs
 	rhythm      bool
 	wave        []float64
+	mode        viewMode
+}
+
+type viewMode int
+
+const (
+	pageMode viewMode = iota
+	scrollMode
+)
+
+func (v viewMode) String() string {
+	if v == scrollMode {
+		return "scroll"
+	}
+	return "page"
 }
 
 const defaultCellW = 3
@@ -327,6 +345,8 @@ func (m *model) rebuild() {
 	l := m.res.Layout
 	mpl := m.mpl
 	switch {
+	case m.mode == scrollMode:
+		mpl = max(l.Measures, 1)
 	case mpl > 0:
 	case m.vp.Width() <= 1:
 		mpl = l.MeasuresPerLine
@@ -362,7 +382,7 @@ func (m *model) cycleZoom() {
 }
 
 func (m *model) setMeasuresPerLine(delta int) {
-	if m.res == nil {
+	if m.res == nil || m.mode == scrollMode {
 		return
 	}
 	cur := m.res.Layout.MeasuresPerLine
@@ -509,8 +529,13 @@ func (m model) updateViewer(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.setMeasuresPerLine(+1)
 			return m, nil
 		case key.Matches(msg, m.keys.AutoFit):
-			m.mpl = 0
-			m.rebuild()
+			if m.mode == pageMode {
+				m.mpl = 0
+				m.rebuild()
+			}
+			return m, nil
+		case key.Matches(msg, m.keys.ViewMode):
+			m.toggleMode()
 			return m, nil
 		case key.Matches(msg, m.keys.Zoom):
 			m.cycleZoom()
@@ -727,8 +752,23 @@ func (m *model) ensureCursorVisible() {
 	m.followCursor(block, col)
 }
 
+func (m *model) toggleMode() {
+	if m.mode == pageMode {
+		m.mode = scrollMode
+	} else {
+		m.mode = pageMode
+	}
+	m.vp.GotoTop()
+	m.vp.SetXOffset(0)
+	m.rebuild()
+}
+
 func (m *model) followCursor(block, col int) {
 	l := m.res.Layout
+	if m.mode == scrollMode {
+		m.vp.SetXOffset(max(0, col-m.vp.Width()/3))
+		return
+	}
 	top := block * l.Stride()
 	bottom := top + l.Stride() - 2
 	switch {
@@ -849,7 +889,7 @@ func (m model) headerView() string {
 		rhythm = "rhythm"
 	}
 	right := m.st.muted.Render(fmt.Sprintf("×%d", m.res.Layout.CellW)) + sep +
-		m.st.muted.Render(rhythm) + sep + m.st.muted.Render("page") + " "
+		m.st.muted.Render(rhythm) + sep + m.st.muted.Render(m.mode.String()) + " "
 	return m.spread(name, right, w)
 }
 
@@ -906,7 +946,7 @@ func (m model) statusView() string {
 	theme := on(m.st.muted).Render(m.st.themeName + " ")
 	full := tempo + sep + on(m.st.fg).Render(m.tuningName()) + sep +
 		on(m.st.fg).Render(fmt.Sprintf("1/%d", m.res.GridDiv*4)) + sep +
-		on(m.st.fg).Render(fmt.Sprintf("%d/line", m.res.Layout.MeasuresPerLine)) + sep + theme
+		on(m.st.fg).Render(m.perLineLabel()) + sep + theme
 	for _, right := range []string{full, tempo + sep + theme, ""} {
 		if lipgloss.Width(left)+lipgloss.Width(right)+1 <= w {
 			return m.bandLine(left, right, w)
@@ -936,11 +976,11 @@ func (m model) viewerView() string {
 		case panelRight:
 			border := strings.TrimRight(strings.Repeat(m.st.frame.Render("│")+"\n", m.vp.Height()), "\n")
 			panel := m.rule(m.notes.header(m.st), m.notes.width) + "\n" + m.notes.View(m.st)
-			panel = lipgloss.NewStyle().Width(m.notes.width).Height(m.vp.Height()).Render(panel)
+			panel = lipgloss.NewStyle().Width(m.notes.width).Height(m.vp.Height()).MaxHeight(m.vp.Height()).Render(panel)
 			body = lipgloss.JoinHorizontal(lipgloss.Top, tabView, border, panel)
 		default:
 			body += "\n" + m.rule(m.notes.header(m.st), m.w) + "\n" +
-				lipgloss.NewStyle().Height(m.notes.height).Render(m.notes.View(m.st))
+				lipgloss.NewStyle().Height(m.notes.height).MaxHeight(m.notes.height).Render(m.notes.View(m.st))
 		}
 	}
 	return m.headerView() + "\n" + body + "\n" + m.waveView() + "\n" + m.statusView() + "\n" + m.helpView()
@@ -1026,4 +1066,11 @@ func (m *model) click(x, y int) {
 			m.selectNote(row)
 		}
 	}
+}
+
+func (m model) perLineLabel() string {
+	if m.mode == scrollMode {
+		return "scroll"
+	}
+	return fmt.Sprintf("%d/line", m.res.Layout.MeasuresPerLine)
 }
