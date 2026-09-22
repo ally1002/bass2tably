@@ -4,9 +4,11 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"bass2tably/internal/app"
+	"bass2tably/internal/gpout"
 	"bass2tably/internal/midiout"
 	"bass2tably/internal/tui"
 )
@@ -17,6 +19,7 @@ func main() {
 	grid := flag.Int("grid", 16, "quantization grid: 8 or 16")
 	position := flag.Float64("position", 0, "bias fret assignment toward this neck position")
 	out := flag.String("out", "", "write a MIDI file to this path (omit to skip MIDI output)")
+	gp := flag.String("gp", "", "write a Guitar Pro 5 file to this path (omit to skip)")
 	tuiFlag := flag.Bool("tui", false, "open the TUI viewer for the given file")
 	theme := flag.String("theme", "amber", "TUI colour theme: "+strings.Join(tui.ThemeNames(), ", "))
 	ascii := flag.Bool("ascii", false, "TUI: draw the tab with ASCII only (no box-drawing glyphs)")
@@ -30,7 +33,7 @@ func main() {
 	if *tuiFlag || flag.NArg() == 0 {
 		err = runTUI(*bpm, *tuning, *grid, *position, *theme, *ascii, flag.Args())
 	} else {
-		err = run(*bpm, *tuning, *grid, *position, *out, flag.Args())
+		err = run(*bpm, *tuning, *grid, *position, *out, *gp, flag.Args())
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "bass2tably:", err)
@@ -54,7 +57,7 @@ func runTUI(bpm float64, tuning string, grid int, position float64, theme string
 	}, tui.Config{Theme: theme, ASCII: ascii})
 }
 
-func run(bpm float64, tuning string, grid int, position float64, out string, args []string) error {
+func run(bpm float64, tuning string, grid int, position float64, out, gp string, args []string) error {
 	if len(args) != 1 {
 		return fmt.Errorf("expected exactly one input WAV file, got %d", len(args))
 	}
@@ -78,6 +81,18 @@ func run(bpm float64, tuning string, grid int, position float64, out string, arg
 			return err
 		}
 		fmt.Printf("\nwrote %s\n", out)
+	}
+	if gp != "" {
+		title := strings.TrimSuffix(filepath.Base(input), filepath.Ext(input))
+		score, rep := gpout.Build(res.Notes, res.Frets, res.Tuning, res.GridDiv, res.BPM, title)
+		if err := gpout.Write(gp, score); err != nil {
+			return err
+		}
+		fmt.Printf("\nwrote %s (%d bars, %d notes, %d ties", gp, rep.Bars, rep.Notes, rep.Ties)
+		if rep.Unplayable > 0 || rep.Dropped > 0 {
+			fmt.Printf(", %d unplayable, %d dropped", rep.Unplayable, rep.Dropped)
+		}
+		fmt.Println(")")
 	}
 	return nil
 }
