@@ -174,7 +174,7 @@ const defaultCellW = 3
 
 func newModel(path string, opts app.Options) model {
 	m := model{
-		finder:    newFinder([]string{".wav", ".m4a", ".mp3", ".ogg", ".flac"}),
+		finder:    newFinder([]string{".wav", ".m4a", ".mp3", ".ogg", ".flac"}, opts),
 		spin:      spinner.New(spinner.WithSpinner(spinner.MiniDot)),
 		vp:        viewport.New(),
 		help:      help.New(),
@@ -230,7 +230,7 @@ func (m *model) cycleTheme() {
 
 func analyzeCmd(path string, opts app.Options) tea.Cmd {
 	return func() tea.Msg {
-		res, err := app.Analyze(path, opts)
+		res, err := app.AnalyzeCached(path, opts)
 		if err != nil {
 			return analysisErrMsg{err}
 		}

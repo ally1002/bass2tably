@@ -9,6 +9,10 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
+
+	"bass2tably/internal/app"
+	"bass2tably/internal/music"
+	"bass2tably/internal/tab"
 )
 
 var wavExts = []string{".wav", ".m4a", ".mp3", ".ogg", ".flac"}
@@ -44,7 +48,7 @@ func setupDir(t *testing.T) string {
 
 func finderAt(t *testing.T, dir string) finder {
 	t.Helper()
-	f := newFinder(wavExts)
+	f := newFinder(wavExts, testOpts)
 	f.start = dir
 	f, _ = f.Update(readTestDir(t, dir))
 	return f
@@ -123,7 +127,7 @@ func TestBrowseDescendsAndGoesUp(t *testing.T) {
 }
 
 func TestBrowseErrorSurfacesOnPickerScreen(t *testing.T) {
-	f := newFinder(wavExts)
+	f := newFinder(wavExts, testOpts)
 	msg := readDirCmd(filepath.Join(t.TempDir(), "missing"), wavExts)().(dirReadMsg)
 	if msg.err == nil {
 		t.Fatal("expected an error for a missing directory")
@@ -201,7 +205,7 @@ func TestScanBounds(t *testing.T) {
 }
 
 func TestScanStaleGenerationDropped(t *testing.T) {
-	f := newFinder(wavExts)
+	f := newFinder(wavExts, testOpts)
 	f.scanGen = 3
 	f, _ = f.Update(scanDoneMsg{gen: 2, root: "/x", files: []fileEntry{{name: "stale.wav"}}})
 	if f.scanned != nil {
@@ -354,7 +358,7 @@ func TestPreviewCardShowsWavFacts(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "take.wav")
 	writeTestWav(t, path, 44100, 22050)
-	f := newFinder(wavExts)
+	f := newFinder(wavExts, testOpts)
 	f.start = root
 	f, cmd := f.Update(readTestDir(t, root))
 	if cmd == nil {
@@ -420,5 +424,33 @@ func TestFinderFillsItsHeight(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func TestFinderBadgeShowsCachedSummary(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	root := t.TempDir()
+	done, fresh := filepath.Join(root, "done.wav"), filepath.Join(root, "fresh.wav")
+	writeTestWav(t, done, 44100, 4410)
+	writeTestWav(t, fresh, 44100, 4410)
+	notes := []music.Note{{Midi: 33}, {Midi: 35}, {Midi: 38}}
+	app.Store(done, testOpts, &app.Result{Notes: notes, BPM: 124.5, BPMEstimated: true, Tuning: fixtureTuning, Frets: make([]tab.Fretting, 3)})
+	f := finderAt(t, root)
+	f.setSize(100, 12)
+	rows := strings.Split(ansi.Strip(f.View(testStyles())), "\n")
+	if !strings.Contains(rows[0], "done.wav") || !strings.Contains(rows[0], "✓ 3 notes · ~124.5 bpm") {
+		t.Fatalf("analysed row lacks its badge: %q", rows[0])
+	}
+	if strings.Contains(rows[1], "✓") {
+		t.Fatalf("unanalysed row carries a badge: %q", rows[1])
+	}
+	other := testOpts
+	other.Grid = 8
+	g := newFinder(wavExts, other)
+	g.start = root
+	g, _ = g.Update(readTestDir(t, root))
+	g.setSize(100, 12)
+	if strings.Contains(ansi.Strip(g.View(testStyles())), "✓") {
+		t.Fatal("a badge showed for a result analysed with other options")
 	}
 }

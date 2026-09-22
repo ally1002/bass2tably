@@ -12,6 +12,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"bass2tably/internal/app"
 	"bass2tably/internal/wavio"
 )
 
@@ -82,11 +83,13 @@ type finder struct {
 	width    int
 	height   int
 	ascii    bool
+	opts     app.Options
 	preview  map[string]preview
 	pending  map[string]bool
+	badges   map[string]*app.Summary
 }
 
-func newFinder(exts []string) finder {
+func newFinder(exts []string, opts app.Options) finder {
 	in := queryInput{prompt: "› ", placeholder: "type to find a take"}
 	start, err := filepath.Abs(".")
 	if err != nil {
@@ -99,8 +102,10 @@ func newFinder(exts []string) finder {
 		input:   in,
 		height:  10,
 		width:   80,
+		opts:    opts,
 		preview: map[string]preview{},
 		pending: map[string]bool{},
+		badges:  map[string]*app.Summary{},
 	}
 }
 
@@ -367,6 +372,7 @@ func (f finder) Update(msg tea.Msg) (finder, tea.Cmd) {
 		}
 		f.dir = msg.dir
 		f.browse = msg.entries
+		clear(f.badges)
 		f.scanned = nil
 		f.scanRoot = ""
 		f.scanning = false
@@ -657,6 +663,9 @@ func (f finder) entryRow(st styles, e fileEntry, pos []int, selected bool, w int
 	default:
 		name = bg(st.pickFile).Render("♪ ") + highlight(e.name, pos, bg(st.pickFile), bg(st.pickDir))
 		meta = bg(st.muted).Render(humanSize(e.size))
+		if s, ok := f.badge(e); ok {
+			meta = bg(st.accent).Render("✓ "+badgeText(s)) + bg(lipgloss.NewStyle()).Render("  ") + meta
+		}
 		if e.recent {
 			meta = bg(st.faint).Render("recent  ") + meta
 		}
@@ -720,6 +729,9 @@ func (f finder) previewView(st styles, w int) string {
 			}
 			facts := fmt.Sprintf("%.1f kHz · %s · %d-bit · %s", float64(pv.info.SampleRate)/1000, ch, pv.info.BitDepth, fmtClock(pv.info.Duration))
 			lines = append(lines, pad(st.fg.Render(facts)), pad(st.muted.Render(humanSize(e.size))))
+			if s, ok := f.badge(e); ok {
+				lines = append(lines, pad(st.accent.Render("✓ analysed · "+badgeText(s))))
+			}
 			if len(pv.pk) > 0 && w >= 12 {
 				lines = append(lines, "", " "+waveRow(peaks(pv.pk, w-2), 0, 0, 0, st, f.ascii))
 			}
@@ -769,4 +781,31 @@ func (f *finder) click(x, y int) tea.Cmd {
 func (f *finder) wheel(delta int) tea.Cmd {
 	f.move(delta)
 	return f.requestPreview()
+}
+
+func (f finder) badge(e fileEntry) (app.Summary, bool) {
+	if e.isDir || f.badges == nil {
+		return app.Summary{}, false
+	}
+	if s, seen := f.badges[e.path]; seen {
+		if s == nil {
+			return app.Summary{}, false
+		}
+		return *s, true
+	}
+	s, ok := app.Peek(e.path, f.opts)
+	if !ok {
+		f.badges[e.path] = nil
+		return app.Summary{}, false
+	}
+	f.badges[e.path] = &s
+	return s, true
+}
+
+func badgeText(s app.Summary) string {
+	bpm := fmt.Sprintf("%.1f", s.BPM)
+	if s.Estimated {
+		bpm = "~" + bpm
+	}
+	return fmt.Sprintf("%d notes · %s bpm", s.Notes, bpm)
 }
