@@ -1,6 +1,6 @@
 # bass2tably
 
-Turns a bass recording into an ASCII bass tab in the terminal — either printed once, or in an interactive TUI that plays the audio back with a cursor running over the tab. Optionally writes a Standard MIDI File or a Guitar Pro 5 file too, so riffs never get forgotten again.
+Turns a bass recording into a bass tab in the terminal — printed once as ASCII, or in an interactive TUI that draws sustains, ties and rhythm beams, plays the audio back under a cursor, and loops, clicks and slows a section for practice. Optionally writes a Standard MIDI File or a Guitar Pro 5 file too, so riffs never get forgotten again.
 
 Pure Go DSP (pitch from YIN's period candidates ranked by a two-way harmonic mismatch against the note's spectrum, onsets from a broadband energy envelope unioned with high-frequency spectral flux), no machine learning. Audio playback uses miniaudio through cgo; non-WAV input is decoded with the system `ffmpeg`.
 
@@ -33,43 +33,80 @@ With `--gp`, also a Guitar Pro 5 file: one bass track, 4/4, the tab's strings an
 
 ## TUI
 
-The viewer draws the tab with box-drawing lines: a note's sustain runs as `═` for its length in the string's colour, a note held across a bar line reopens the next measure as `(3)`, a ruler above each system numbers the measures, notes already behind the playhead are dimmed and the current column is highlighted. Under each system a stem row marks every attack with `│` and every rest with `·`, and one or two beam rows group the notes shorter than a beat within their beat, as engraved rhythm does: `└───┘` is a pair of eighths, `└─┴─┴─┘` four sixteenths, `└─` a lone short note. Under the tab sits a waveform of the take with the playhead on it, and below that a status band with the clock, measure and beat on the left and the tempo, tuning, grid, measures per line and theme on the right. The header shows only the file, the zoom, and whether the rhythm rows are on. Terminals without box-drawing glyphs get the plain ASCII tab with `--ascii`. Three themes ship, each with a light and a dark variant chosen from the terminal background: `amber` (warm, tube-amp glow), `neon` (one colour per string, like coated string sets) and `ink` (monochrome). Pick one with `--theme` or cycle with `t`.
+`bass2tably` with no file opens the finder; `bass2tably --tui riff.wav` goes straight to the viewer.
 
-The layout adapts: in the `page` layout measures per line fit the terminal width by default and can be forced with `[` and `]`; `v` switches to the `scroll` layout, one long system that follows the playhead sideways and keeps it a third of the way across the screen, the way a DAW does. The note list docks at the bottom or on the right and can be resized.
+### The tab
+
+The viewer draws a Songsterr-shaped tab from a typed model of the analysis, not from the command-line text. String lines are box-drawing glyphs (`─ │ ║`); a note's sustain runs as `═` for its length in the string's colour; a note held across a bar line reopens the next measure as `(3)`; a ruler above each system numbers the measures; notes already behind the playhead are dimmed and the current column is highlighted. Under each system a stem row marks every attack with `│` and the start of every rest with `·`, and one or two beam rows group the notes shorter than a beat within their beat, as engraved rhythm does: `└───┘` is a pair of eighths, `└─┴─┴─┘` four sixteenths, `└─` a lone short note. `r` hides the rhythm rows and `z` cycles the cell width between 2, 3 and 4 columns per grid slot (a two-digit fret always gets at least 3).
+
+Below the tab sits a waveform of the take with the playhead on it, then a status band with the clock, measure and beat on the left and the tempo, tuning, grid, layout and theme on the right. Terminals without box-drawing glyphs get plain `-` and `|` with `--ascii`. Three themes ship, each with a light and a dark variant chosen from the terminal background: `amber` (warm, tube-amp glow), `neon` (one colour per string, like coated string sets) and `ink` (monochrome). Pick one with `--theme` or cycle with `t`.
+
+### Two layouts
+
+In the `page` layout measures wrap to the terminal width; `[` and `]` force the count and `0` fits it again. `v` switches to the `scroll` layout: one long system that follows the playhead sideways and keeps it a third of the way across the screen, the way a DAW does, for playing along. The tab scrolls itself to keep the cursor visible while playing; scrolling by hand while paused is never overridden. The note list (`n`) docks at the bottom or on the right (`N`) and can be resized (`+` `-`).
+
+### The finder
+
+Start typing to fuzzy-filter every audio file under the current directory — four levels deep, five thousand files at most, hidden directories and `node_modules` skipped — with the files you opened before listed first. `esc` clears the filter, `enter` opens the selection or descends into a directory, `backspace` (or `h` with an empty filter) goes up a level and `~` jumps home. At ninety columns or more a preview pane shows the selected WAV's sample rate, channels, bit depth and duration over a mini waveform; other formats are decoded with ffmpeg when opened. Since letters go to the filter, in the finder `ctrl+t` cycles the theme and `ctrl+c` quits.
+
+Recent files are remembered in `$XDG_STATE_HOME/bass2tably/recent` (`~/.local/state` by default). Analysis results are cached in `$XDG_CACHE_HOME/bass2tably` (`~/.cache` by default), keyed by the file's path, size and modification time and by the options used, so reopening a take is instant and the finder marks files already analysed with the current options as `✓ 64 notes · 124.5 bpm`. Delete that directory to clear the cache; the command-line output never reads it.
+
+### Mouse
+
+Click the waveform to seek, click a note to jump to it, click a row of the note list or the finder to select it (again to open it), and scroll with the wheel. Inside tmux the mouse reaches the pane only with `set -g mouse on` in `~/.tmux.conf`.
+
+### Practice tools
+
+Loop, metronome and speed live inside the audio callback, so they are sample-exact. `a` sets the loop start at the current measure and `b` the loop end after the current measure (they swap if the end lands first); `x` clears it; the ruler and the waveform shade the looped measures and the loop wraps at the bar line with no gap. `m` clicks a metronome on the grid the tab was quantized to, starting from the first onset and accented every four beats. `<` and `>` step the speed through 0.5×, 0.75× and 1×. Speed is a plain rate change, like a tape machine: 0.5× plays an octave lower, and the status band says so.
+
+If no audio device is available the tab still opens, with a notice in the status band that playback is disabled.
+
+### Export
+
+`e` opens a small dialog: tick Guitar Pro 5 (the same file `--gp` writes) and/or MIDI with `space` on the highlighted row (nothing is ticked by default), edit the destination — prefilled next to the input, without extension; `~` works — then `enter` writes and `esc` cancels. The status band reports what was written for three seconds.
+
+### Keys
+
+Every action is declared once in one table; the help footer (`?`), the command palette (`ctrl+p` or `:`, type to filter, `enter` runs) and this list are all generated from it. A key listed twice acts on the note list while it is open and on the tab otherwise.
 
 | Key | Action |
 |---|---|
-| `space` | play / pause |
-| `shift+←` `shift+→` or `,` `.` | seek one measure back / forward |
-| `n` | toggle the note list panel |
-| `N` | dock the note list at the bottom or on the right |
-| `+` `-` | grow / shrink the note list |
-| `↑/↓` `j/k` | scroll the tab; with the note panel open, move the note selection (and seek there) |
-| `enter` | play from the selected note |
-| `←/→` `h/l` | scroll the tab horizontally |
-| `g` `G` | jump to top / bottom |
-| `[` `]` | fewer / more measures per line |
-| `0` | fit measures per line to the terminal width again |
-| `z` | cycle the cell width (zoom): 2, 3 or 4 columns per grid slot |
-| `r` | show or hide the rhythm rows under each system |
-| `v` | switch between the `page` layout (measures wrap to the width, for reading) and the `scroll` layout (one long system, the playhead pinned a third of the way in, for playing along) |
-| `a` `b` | set the loop start at the current measure / the loop end after the current measure (they swap if the end lands first) |
-| `x` | clear the loop |
-| `m` | metronome click on the tab's beat grid, accented every four beats |
-| `<` `>` | playback speed 0.5×, 0.75×, 1× (a rate change: 0.5× also plays an octave down) |
-| `t` | next theme |
-| `ctrl+p` or `:` | command palette: type to filter every action by name, `enter` runs it |
-| `?` | expand the help footer |
-| `esc` | back to the file picker |
-| `q` | quit |
-
-The file finder opens when no file is given. Start typing to fuzzy-filter every audio file under the current directory (four levels deep, five thousand files at most; hidden directories and `node_modules` are skipped), with the files you opened before listed first; `esc` clears the filter, `enter` opens the selection or descends into a directory, `backspace` (or `h` with an empty filter) goes up a level and `~` jumps home. At ninety columns or more a preview pane shows the selected WAV's sample rate, channels, bit depth and duration over a mini waveform; other formats are decoded with ffmpeg when opened. Recent files are remembered in `$XDG_STATE_HOME/bass2tably/recent` (`~/.local/state` by default). Analysis results are cached in `$XDG_CACHE_HOME/bass2tably` (`~/.cache` by default), keyed by the file's path, size and modification time and by the options used, so reopening a take in the TUI is instant and the finder marks files already analysed with the current options as `✓ 64 notes · 124.5 bpm`. Delete that directory to clear the cache; the command-line output never reads it. In the finder `ctrl+t` cycles the theme and `ctrl+c` quits, since letters go to the filter.
-
-The mouse works too: click the waveform to seek, click a note to jump to it, click a row of the note list or the finder to select it (again to open it), and scroll with the wheel. Inside tmux the mouse reaches the pane only with `set -g mouse on` in `~/.tmux.conf`.
-
-Practice tools live inside the audio callback, so they are sample-exact: a loop set with `a` and `b` wraps at the bar line with no gap, the metronome (`m`) clicks on the grid the tab was quantized to, starting from the first onset, and `<` `>` slow the playback down to 0.75× or 0.5×. Speed is a plain rate change, like a tape machine: 0.5× plays an octave lower, and the status band says so. The ruler and the waveform shade the looped measures.
-
-The tab scrolls itself to keep the playback cursor visible while playing; scrolling by hand while paused is never overridden. If no audio device is available the tab still opens, with a notice in the transport bar that playback is disabled.
+| `space` | Play / pause |
+| `enter` | Play from the selected note |
+| `shift+←/,` | Seek one measure back |
+| `shift+→/.` | Seek one measure forward |
+| `↑/k` | Select the previous note |
+| `↓/j` | Select the next note |
+| `g` | Select the first note |
+| `G` | Select the last note |
+| `↑/k` | Scroll the tab up |
+| `↓/j` | Scroll the tab down |
+| `←/h` | Scroll the tab left |
+| `→/l` | Scroll the tab right |
+| `g` | Scroll to the top |
+| `G` | Scroll to the bottom |
+| `n` | Toggle the note list |
+| `N` | Dock the note list at the bottom or on the right |
+| `+` | Grow the note list |
+| `-` | Shrink the note list |
+| `[` | Fewer measures per line |
+| `]` | More measures per line |
+| `0` | Fit measures per line to the width |
+| `z` | Cycle the cell width (zoom) |
+| `r` | Toggle the rhythm rows |
+| `v` | Switch between the page and scroll layouts |
+| `a` | Set loop start at this measure |
+| `b` | Set loop end after this measure |
+| `x` | Clear the loop |
+| `m` | Toggle the metronome |
+| `<` | Slower playback |
+| `>` | Faster playback |
+| `e` | Export to Guitar Pro 5 / MIDI… |
+| `ctrl+p` | Command palette |
+| `t` | Next theme |
+| `?` | Toggle the full help |
+| `esc` | Back to the finder |
+| `q` | Quit |
 
 ## Recording guidelines
 
@@ -96,6 +133,7 @@ Tests that need an audio device skip themselves when none is available.
 
 - No chords or double stops — the pipeline is strictly monophonic.
 - No slides, bends, or hammer-ons: they come out as separate notes or wrong pitches.
+- The rhythm rows show attacks, rests and beams only: no dotted values, tuplets or techniques (slides, hammer-ons, ghost notes). The Guitar Pro export carries the dots and ties.
 - Sixteenth notes are found completely up to ~160 BPM (94 ms per note): 16 of 16 attacks on a synthetic run, every one pitched. Past that the result turns erratic — 12 of 16 at 180 BPM (83 ms), 15 of 16 at 200 BPM (75 ms). Pitch is not the limit; every segment that is found still resolves a pitch at 75 ms. The 60 ms merge window is, because it discards a correct spectral onset whenever the broadband detector has already placed a late one within that distance.
 - Notes closer together than 60 ms merge into one. That window is also what stops a single pluck registering as two notes, so it cannot simply be shortened.
 - Low-frequency rolloff in the recording (phone mic, aggressive highpass) can drop onsets on the low B string.
