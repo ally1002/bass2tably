@@ -38,7 +38,7 @@ func TestSlotCellMatchesRenderLayout(t *testing.T) {
 	lines := strings.Split(s, "\n")
 	for i, n := range notes {
 		block, col := l.SlotCell(n.Slot)
-		row := block*(l.Rows+1) + (l.Rows - 1 - frets[i].String)
+		row := l.StringRow(block, frets[i].String)
 		fs := strconv.Itoa(frets[i].Fret)
 		want := fs + strings.Repeat("-", l.CellW-len(fs))
 		got := lines[row][col : col+l.CellW]

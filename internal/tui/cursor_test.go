@@ -50,14 +50,15 @@ func TestRenderTabStylesOnlyCursorBlock(t *testing.T) {
 	plain := strings.Split(res.Tab, "\n")
 	for i, n := range res.Notes[1:] {
 		block, col := res.Layout.SlotCell(n.Slot)
-		start := block * (res.Layout.Rows + 1)
-		fretRow := start + res.Layout.Rows - 1 - frets[i+1].String
-		cursorCell := st.cursor.Render(plain[fretRow][col : col+res.Layout.CellW])
-		out := strings.Split(renderTab(res.Tab, res.Layout, st, block, col), "\n")
+		l := res.Layout
+		start := block * l.Stride()
+		fretRow := l.StringRow(block, frets[i+1].String)
+		cursorCell := st.cursor.Render(plain[fretRow][col : col+l.CellW])
+		out := strings.Split(renderTab(res.Tab, l, st, block, col), "\n")
 		hits := 0
 		for r, line := range out {
 			has := strings.Contains(line, cursorCell)
-			inBlock := r >= start && r < start+res.Layout.Rows
+			inBlock := r >= start+l.Top && r < start+l.Top+l.Rows
 			if has && !inBlock {
 				t.Errorf("slot %d row %d: cursor style outside the cursor block", n.Slot, r)
 			}

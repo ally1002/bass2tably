@@ -39,17 +39,17 @@ func (w *runWriter) String() string {
 
 func renderTab(plain string, l tab.Layout, st styles, curBlock, curCol int) string {
 	lines := strings.Split(plain, "\n")
-	stride := l.Rows + 1
-	if stride < 2 {
+	stride := l.Stride()
+	if l.Rows < 1 {
 		return plain
 	}
 	for r, line := range lines {
 		row := r % stride
-		if row >= l.Rows || len(line) < l.NameW+1 {
+		if row < l.Top || row >= l.Top+l.Rows || len(line) < l.NameW+1 {
 			continue
 		}
 		block := r / stride
-		s := l.Rows - 1 - row
+		s := l.Top + l.Rows - 1 - row
 		lines[r] = renderTabRow(line, l, st, s, block == curBlock, curCol)
 	}
 	return strings.Join(lines, "\n")

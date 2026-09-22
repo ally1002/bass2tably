@@ -647,8 +647,8 @@ func (m *model) ensureCursorVisible() {
 
 func (m *model) followCursor(block, col int) {
 	l := m.res.Layout
-	top := block * (l.Rows + 1)
-	bottom := top + l.Rows - 1
+	top := block * l.Stride()
+	bottom := top + l.Stride() - 2
 	switch {
 	case top < m.vp.YOffset():
 		m.vp.SetYOffset(top)
