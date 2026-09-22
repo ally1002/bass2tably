@@ -23,20 +23,22 @@ func newPaint(st lipgloss.Style) paint {
 }
 
 type paints struct {
-	name, fret, sustain                                           []paint
-	bar, dash, cursor, cursorDash, played, ruler, rulerCur, frame paint
+	name, fret, sustain                                                                    []paint
+	bar, dash, cursor, cursorDash, played, ruler, rulerCur, rulerLoop, rulerCurLoop, frame paint
 }
 
 func newPaints(st styles, rows int) paints {
 	p := paints{
-		bar:        newPaint(st.bar),
-		dash:       newPaint(st.dash),
-		cursor:     newPaint(st.cursor),
-		cursorDash: newPaint(st.cursorDash),
-		played:     newPaint(st.played),
-		ruler:      newPaint(st.ruler),
-		rulerCur:   newPaint(st.rulerCur),
-		frame:      newPaint(st.frame),
+		bar:          newPaint(st.bar),
+		dash:         newPaint(st.dash),
+		cursor:       newPaint(st.cursor),
+		cursorDash:   newPaint(st.cursorDash),
+		played:       newPaint(st.played),
+		ruler:        newPaint(st.ruler),
+		rulerCur:     newPaint(st.rulerCur),
+		rulerLoop:    newPaint(st.ruler.Background(st.pal.selBg)),
+		rulerCurLoop: newPaint(st.rulerCur.Background(st.pal.selBg)),
+		frame:        newPaint(st.frame),
 	}
 	for s := 0; s < rows; s++ {
 		p.name = append(p.name, newPaint(st.name(s)))
@@ -75,7 +77,7 @@ func (w *runWriter) String() string {
 	return w.b.String()
 }
 
-func renderSheet(sh tab.Sheet, g tab.Glyphs, st styles, cur int, shading bool, rh rhythmOpts) string {
+func renderSheet(sh tab.Sheet, g tab.Glyphs, st styles, cur int, shading bool, rh rhythmOpts, loop [2]int) string {
 	var b strings.Builder
 	p := newPaints(st, sh.Rows)
 	last := len(sh.Systems) - 1
@@ -83,7 +85,7 @@ func renderSheet(sh tab.Sheet, g tab.Glyphs, st styles, cur int, shading bool, r
 		if si > 0 {
 			b.WriteString("\n")
 		}
-		b.WriteString(rulerRow(sh, sys, p, cur))
+		b.WriteString(rulerRow(sh, sys, p, cur, loop))
 		b.WriteString("\n")
 		for s := sh.Rows - 1; s >= 0; s-- {
 			b.WriteString(stringRow(sh, sys, s, g, p, cur, shading, si == last))
@@ -99,15 +101,21 @@ func renderSheet(sh tab.Sheet, g tab.Glyphs, st styles, cur int, shading bool, r
 	return b.String()
 }
 
-func rulerRow(sh tab.Sheet, sys tab.System, p paints, cur int) string {
+func rulerRow(sh tab.Sheet, sys tab.System, p paints, cur int, loop [2]int) string {
 	var w runWriter
 	w.write(p.ruler, strings.Repeat(" ", sh.NameW+1))
 	fieldW := sh.SlotsPerMeasure*sh.CellW + 1
 	for _, m := range sys.Measures {
 		label := strconv.Itoa(m.Index + 1)
+		inLoop := m.Index >= loop[0] && m.Index < loop[1]
 		style := p.ruler
-		if cur >= 0 && cur/sh.SlotsPerMeasure == m.Index {
+		switch current := cur >= 0 && cur/sh.SlotsPerMeasure == m.Index; {
+		case current && inLoop:
+			style = p.rulerCurLoop
+		case current:
 			style = p.rulerCur
+		case inLoop:
+			style = p.rulerLoop
 		}
 		w.write(style, label+strings.Repeat(" ", max(fieldW-len(label), 0)))
 	}

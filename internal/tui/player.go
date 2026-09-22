@@ -10,6 +10,10 @@ type player interface {
 	SeekSec(t float64)
 	Done() bool
 	Close()
+	SetSpeed(f float64)
+	SetLoop(startSec, endSec float64)
+	ClearLoop()
+	SetClick(bpm, offsetSec float64, accentEvery int, on bool)
 }
 
 func newPlayer(samples []float64, rate int) (player, error) {

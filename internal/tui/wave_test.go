@@ -51,13 +51,13 @@ func TestWaveRowWidth(t *testing.T) {
 		pk := peaks(samples, n)
 		for _, frac := range []float64{0, 0.5, 1} {
 			for _, ascii := range []bool{false, true} {
-				if w := ansi.StringWidth(waveRow(pk, frac, st, ascii)); w != n {
+				if w := ansi.StringWidth(waveRow(pk, frac, 0, 0, st, ascii)); w != n {
 					t.Errorf("n %d frac %.1f ascii %v: width %d", n, frac, ascii, w)
 				}
 			}
 		}
 	}
-	if got := ansi.Strip(waveRow(nil, 0, st, false)); got != "" {
+	if got := ansi.Strip(waveRow(nil, 0, 0, 0, st, false)); got != "" {
 		t.Errorf("wave of no peaks = %q, want empty", got)
 	}
 }

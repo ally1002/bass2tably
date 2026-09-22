@@ -33,23 +33,26 @@ func peaks(samples []float64, n int) []float64 {
 	return out
 }
 
-func waveRow(pk []float64, frac float64, st styles, ascii bool) string {
+func waveRow(pk []float64, frac, loopA, loopB float64, st styles, ascii bool) string {
 	var w runWriter
 	shapes, head := []rune(blocks), playheadBar
 	if ascii {
 		shapes, head = []rune(blocksASCII), playheadASC
 	}
-	done, todo, cur := newPaint(st.accent), newPaint(st.faint), newPaint(st.accent.Bold(true))
+	done, todo, cur, loop := newPaint(st.accent), newPaint(st.faint), newPaint(st.accent.Bold(true)), newPaint(st.accent)
 	played := int(frac*float64(len(pk)) + 0.5)
+	la, lb := int(loopA*float64(len(pk))+0.5), int(loopB*float64(len(pk))+0.5)
 	for i, p := range pk {
-		r := string(shapes[min(int(p*7+0.5), 7)])
+		level := min(int(p*7+0.5), 7)
 		switch {
 		case i == played:
 			w.write(cur, head)
 		case i < played:
-			w.write(done, r)
+			w.write(done, string(shapes[level]))
+		case lb > la && i >= la && i < lb:
+			w.write(loop, string(shapes[min(level, 1)]))
 		default:
-			w.write(todo, r)
+			w.write(todo, string(shapes[level]))
 		}
 	}
 	return w.String()

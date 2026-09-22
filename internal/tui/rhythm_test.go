@@ -179,7 +179,7 @@ func TestCursorRowWithRhythmOn(t *testing.T) {
 	for i, n := range notes {
 		block, _ := l.SlotCell(n.Slot)
 		fretRow := l.StringRow(block, frets[i].String)
-		lines := strings.Split(renderSheet(sh, tab.Unicode, st, n.Slot, false, rh), "\n")
+		lines := strings.Split(renderSheet(sh, tab.Unicode, st, n.Slot, false, rh, noLoop), "\n")
 		cursorCell := st.cursor.Render(cellAt(sh, n.Slot, frets[i].String))
 		for r, line := range lines {
 			if strings.Contains(line, cursorCell) != (r == fretRow) {
@@ -191,7 +191,7 @@ func TestCursorRowWithRhythmOn(t *testing.T) {
 			t.Errorf("slot %d: row under the strings is not the stem row: %q", n.Slot, stripped)
 		}
 	}
-	if got := stripChrome(renderSheet(sh, tab.Unicode, st, -1, false, rh), l); got != sh.Text(tab.Unicode) {
+	if got := stripChrome(renderSheet(sh, tab.Unicode, st, -1, false, rh, noLoop), l); got != sh.Text(tab.Unicode) {
 		t.Fatalf("stripping rulers and rhythm rows does not give back the text:\n%s", got)
 	}
 }

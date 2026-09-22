@@ -51,6 +51,10 @@ The layout adapts: in the `page` layout measures per line fit the terminal width
 | `z` | cycle the cell width (zoom): 2, 3 or 4 columns per grid slot |
 | `r` | show or hide the rhythm rows under each system |
 | `v` | switch between the `page` layout (measures wrap to the width, for reading) and the `scroll` layout (one long system, the playhead pinned a third of the way in, for playing along) |
+| `a` `b` | set the loop start at the current measure / the loop end after the current measure (they swap if the end lands first) |
+| `x` | clear the loop |
+| `m` | metronome click on the tab's beat grid, accented every four beats |
+| `<` `>` | playback speed 0.5×, 0.75×, 1× (a rate change: 0.5× also plays an octave down) |
 | `t` | next theme |
 | `?` | expand the help footer |
 | `esc` | back to the file picker |
@@ -59,6 +63,8 @@ The layout adapts: in the `page` layout measures per line fit the terminal width
 The file finder opens when no file is given. Start typing to fuzzy-filter every audio file under the current directory (four levels deep, five thousand files at most; hidden directories and `node_modules` are skipped), with the files you opened before listed first; `esc` clears the filter, `enter` opens the selection or descends into a directory, `backspace` (or `h` with an empty filter) goes up a level and `~` jumps home. At ninety columns or more a preview pane shows the selected WAV's sample rate, channels, bit depth and duration over a mini waveform; other formats are decoded with ffmpeg when opened. Recent files are remembered in `$XDG_STATE_HOME/bass2tably/recent` (`~/.local/state` by default). In the finder `ctrl+t` cycles the theme and `ctrl+c` quits, since letters go to the filter.
 
 The mouse works too: click the waveform to seek, click a note to jump to it, click a row of the note list or the finder to select it (again to open it), and scroll with the wheel. Inside tmux the mouse reaches the pane only with `set -g mouse on` in `~/.tmux.conf`.
+
+Practice tools live inside the audio callback, so they are sample-exact: a loop set with `a` and `b` wraps at the bar line with no gap, the metronome (`m`) clicks on the grid the tab was quantized to, starting from the first onset, and `<` `>` slow the playback down to 0.75× or 0.5×. Speed is a plain rate change, like a tape machine: 0.5× plays an octave lower, and the status band says so. The ruler and the waveform shade the looped measures.
 
 The tab scrolls itself to keep the playback cursor visible while playing; scrolling by hand while paused is never overridden. If no audio device is available the tab still opens, with a notice in the transport bar that playback is disabled.
 

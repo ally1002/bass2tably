@@ -57,6 +57,12 @@ type viewerKeys struct {
 	Zoom       key.Binding
 	Rhythm     key.Binding
 	ViewMode   key.Binding
+	LoopA      key.Binding
+	LoopB      key.Binding
+	LoopClear  key.Binding
+	Click      key.Binding
+	Slower     key.Binding
+	Faster     key.Binding
 	Theme      key.Binding
 	Back       key.Binding
 	Help       key.Binding
@@ -73,6 +79,7 @@ func (k viewerKeys) FullHelp() [][]key.Binding {
 		{k.Up, k.Down, k.Left, k.Right, k.Top, k.Bottom},
 		{k.Notes, k.PanelSide, k.PanelGrow, k.PanelShrnk},
 		{k.Fewer, k.More, k.AutoFit, k.Zoom, k.Rhythm, k.ViewMode},
+		{k.LoopA, k.LoopB, k.LoopClear, k.Click, k.Slower, k.Faster},
 		{k.Theme, k.Help, k.Back, k.Quit},
 	}
 }
@@ -93,6 +100,12 @@ func defaultViewerKeys() viewerKeys {
 		Zoom:       key.NewBinding(key.WithKeys("z"), key.WithHelp("z", "zoom")),
 		Rhythm:     key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "rhythm rows")),
 		ViewMode:   key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "page/scroll")),
+		LoopA:      key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "loop start")),
+		LoopB:      key.NewBinding(key.WithKeys("b"), key.WithHelp("b", "loop end")),
+		LoopClear:  key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "clear loop")),
+		Click:      key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "metronome")),
+		Slower:     key.NewBinding(key.WithKeys("<"), key.WithHelp("<", "slower")),
+		Faster:     key.NewBinding(key.WithKeys(">"), key.WithHelp(">", "faster")),
 		Theme:      key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "theme")),
 		Up:         key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
 		Down:       key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
@@ -137,6 +150,10 @@ type model struct {
 	rhythm      bool
 	wave        []float64
 	mode        viewMode
+	loopA       int
+	loopB       int
+	metronome   bool
+	speed       float64
 }
 
 type viewMode int
@@ -169,8 +186,12 @@ func newModel(path string, opts app.Options) model {
 		cellW:     defaultCellW,
 		glyphs:    tab.Unicode,
 		rhythm:    true,
+		loopA:     -1,
+		loopB:     -1,
+		speed:     1,
 	}
 	m.vp.KeyMap.PageDown.SetKeys("pgdown", "f")
+	m.vp.KeyMap.PageUp.SetKeys("pgup")
 	m.vp.SetHorizontalStep(4)
 	m.applyTheme()
 	if path != "" {
@@ -450,6 +471,9 @@ func (m model) updateAnalyzing(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.curPos = 0
 		m.mpl = 0
 		m.wave = nil
+		m.loopA, m.loopB = -1, -1
+		m.metronome = false
+		m.speed = 1
 		m.vp.GotoTop()
 		m.vp.SetXOffset(0)
 		m.resizeViewer()
@@ -536,6 +560,24 @@ func (m model) updateViewer(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case key.Matches(msg, m.keys.ViewMode):
 			m.toggleMode()
+			return m, nil
+		case key.Matches(msg, m.keys.LoopA):
+			m.setLoopA()
+			return m, nil
+		case key.Matches(msg, m.keys.LoopB):
+			m.setLoopB()
+			return m, nil
+		case key.Matches(msg, m.keys.LoopClear):
+			m.clearLoop()
+			return m, nil
+		case key.Matches(msg, m.keys.Click):
+			m.toggleClick()
+			return m, nil
+		case key.Matches(msg, m.keys.Slower):
+			m.stepSpeed(-1)
+			return m, nil
+		case key.Matches(msg, m.keys.Faster):
+			m.stepSpeed(1)
 			return m, nil
 		case key.Matches(msg, m.keys.Zoom):
 			m.cycleZoom()
@@ -720,7 +762,7 @@ func (m *model) setTabContent() {
 	if len(m.res.Notes) > 0 {
 		cur = m.curSlot
 	}
-	m.vp.SetContent(renderSheet(m.sheet, m.glyphs, m.st, cur, m.shading(), m.rhythmOpts()))
+	m.vp.SetContent(renderSheet(m.sheet, m.glyphs, m.st, cur, m.shading(), m.rhythmOpts(), m.loopRange()))
 }
 
 func (m model) shading() bool {
@@ -910,7 +952,8 @@ func (m model) waveView() string {
 	if d := m.res.DurationSec; d > 0 {
 		frac = m.curPos / d
 	}
-	return waveRow(m.wave, frac, m.st, m.glyphs == tab.ASCII)
+	la, lb := m.loopFractions()
+	return waveRow(m.wave, frac, la, lb, m.st, m.glyphs == tab.ASCII)
 }
 
 func (m model) statusView() string {
@@ -936,7 +979,7 @@ func (m model) statusView() string {
 		pos := on(m.st.muted).Render("m ") + on(m.st.fg).Render(fmt.Sprint(measure)) +
 			on(m.st.faint).Render(fmt.Sprintf("/%d", m.res.Layout.Measures)) +
 			on(m.st.muted).Render("  beat ") + on(m.st.fg).Render(fmt.Sprint(beat))
-		left = sp(1) + icon + sp(1) + clock + sp(3) + pos
+		left = sp(1) + icon + sp(1) + clock + sp(3) + pos + m.practiceLabels(sp)
 	}
 	bpm := fmt.Sprintf("%.1f", m.res.BPM)
 	if m.res.BPMEstimated {
@@ -1073,4 +1116,112 @@ func (m model) perLineLabel() string {
 		return "scroll"
 	}
 	return fmt.Sprintf("%d/line", m.res.Layout.MeasuresPerLine)
+}
+
+var speedSteps = []float64{0.5, 0.75, 1}
+
+func (m model) measureOf(slot int) int {
+	return slot / m.res.Layout.SlotsPerMeasure
+}
+
+func (m model) loopRange() [2]int { return [2]int{m.loopA, m.loopB} }
+
+func (m model) loopActive() bool { return m.loopA >= 0 && m.loopB > m.loopA }
+
+func (m model) loopSeconds() (float64, float64) {
+	spm := m.res.Layout.SlotsPerMeasure
+	return slotTime(m.res, m.loopA*spm), slotTime(m.res, m.loopB*spm)
+}
+
+func (m model) loopFractions() (float64, float64) {
+	if m.res == nil || !m.loopActive() || m.res.DurationSec <= 0 {
+		return 0, 0
+	}
+	a, b := m.loopSeconds()
+	return a / m.res.DurationSec, b / m.res.DurationSec
+}
+
+func (m *model) setLoopA() {
+	if m.res == nil {
+		return
+	}
+	m.loopA = m.measureOf(m.curSlot)
+	if m.loopB >= 0 && m.loopB <= m.loopA {
+		m.loopA, m.loopB = m.loopB-1, m.loopA+1
+	}
+	m.applyLoop()
+}
+
+func (m *model) setLoopB() {
+	if m.res == nil {
+		return
+	}
+	m.loopB = m.measureOf(m.curSlot) + 1
+	if m.loopA < 0 {
+		m.loopA = m.loopB - 1
+	}
+	if m.loopB <= m.loopA {
+		m.loopA, m.loopB = m.loopB-1, m.loopA+1
+	}
+	m.applyLoop()
+}
+
+func (m *model) clearLoop() {
+	m.loopA, m.loopB = -1, -1
+	m.applyLoop()
+}
+
+func (m *model) applyLoop() {
+	if m.player != nil {
+		if m.loopActive() {
+			a, b := m.loopSeconds()
+			m.player.SetLoop(a, b)
+		} else {
+			m.player.ClearLoop()
+		}
+	}
+	m.setTabContent()
+}
+
+func (m *model) toggleClick() {
+	if m.res == nil || len(m.res.Notes) == 0 {
+		return
+	}
+	m.metronome = !m.metronome
+	if m.player != nil {
+		m.player.SetClick(m.res.BPM, m.res.Notes[0].StartSec, 4, m.metronome)
+	}
+}
+
+func (m *model) stepSpeed(dir int) {
+	i := 0
+	for k, s := range speedSteps {
+		if s == m.speed {
+			i = k
+		}
+	}
+	i = clamp(i+dir, 0, len(speedSteps)-1)
+	m.speed = speedSteps[i]
+	if m.player != nil {
+		m.player.SetSpeed(m.speed)
+	}
+}
+
+func (m model) practiceLabels(sp func(int) string) string {
+	on := m.st.onBand
+	var b strings.Builder
+	if m.loopActive() {
+		b.WriteString(sp(3) + on(m.st.accent).Render(fmt.Sprintf("↻ %d–%d", m.loopA+1, m.loopB)))
+	}
+	if m.metronome {
+		b.WriteString(sp(3) + on(m.st.accent).Render("♪ click"))
+	}
+	if m.speed != 1 {
+		label := fmt.Sprintf("%g×", m.speed)
+		if m.speed <= 0.5 {
+			label += " (−1 oct)"
+		}
+		b.WriteString(sp(3) + on(m.st.accent).Render(label))
+	}
+	return b.String()
 }

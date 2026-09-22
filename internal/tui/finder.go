@@ -721,7 +721,7 @@ func (f finder) previewView(st styles, w int) string {
 			facts := fmt.Sprintf("%.1f kHz · %s · %d-bit · %s", float64(pv.info.SampleRate)/1000, ch, pv.info.BitDepth, fmtClock(pv.info.Duration))
 			lines = append(lines, pad(st.fg.Render(facts)), pad(st.muted.Render(humanSize(e.size))))
 			if len(pv.pk) > 0 && w >= 12 {
-				lines = append(lines, "", " "+waveRow(peaks(pv.pk, w-2), 0, st, f.ascii))
+				lines = append(lines, "", " "+waveRow(peaks(pv.pk, w-2), 0, 0, 0, st, f.ascii))
 			}
 		}
 	}
