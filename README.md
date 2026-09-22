@@ -55,7 +55,7 @@ The layout adapts: measures per line fit the terminal width by default and can b
 | `esc` | back to the file picker |
 | `q` | quit |
 
-In the file picker, `~` jumps to the home directory and `h` goes up one level.
+The file finder opens when no file is given. Start typing to fuzzy-filter every audio file under the current directory (four levels deep, five thousand files at most; hidden directories and `node_modules` are skipped), with the files you opened before listed first; `esc` clears the filter, `enter` opens the selection or descends into a directory, `backspace` (or `h` with an empty filter) goes up a level and `~` jumps home. At ninety columns or more a preview pane shows the selected WAV's sample rate, channels, bit depth and duration over a mini waveform; other formats are decoded with ffmpeg when opened. Recent files are remembered in `$XDG_STATE_HOME/bass2tably/recent` (`~/.local/state` by default). In the finder `ctrl+t` cycles the theme and `ctrl+c` quits, since letters go to the filter.
 
 The tab scrolls itself to keep the playback cursor visible while playing; scrolling by hand while paused is never overridden. If no audio device is available the tab still opens, with a notice in the transport bar that playback is disabled.
 

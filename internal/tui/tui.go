@@ -97,7 +97,7 @@ func defaultViewerKeys() viewerKeys {
 		Right:      key.NewBinding(key.WithKeys("right", "l"), key.WithHelp("→/l", "right")),
 		Top:        key.NewBinding(key.WithKeys("g", "home"), key.WithHelp("g", "top")),
 		Bottom:     key.NewBinding(key.WithKeys("G", "end"), key.WithHelp("G", "bottom")),
-		Back:       key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "picker")),
+		Back:       key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "finder")),
 		Help:       key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
 		Quit:       key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
 	}
@@ -105,7 +105,7 @@ func defaultViewerKeys() viewerKeys {
 
 type model struct {
 	screen      screen
-	picker      picker
+	finder      finder
 	spin        spinner.Model
 	vp          viewport.Model
 	help        help.Model
@@ -139,7 +139,7 @@ const defaultCellW = 3
 
 func newModel(path string, opts app.Options) model {
 	m := model{
-		picker:    newPicker([]string{".wav", ".m4a", ".mp3", ".ogg", ".flac"}),
+		finder:    newFinder([]string{".wav", ".m4a", ".mp3", ".ogg", ".flac"}),
 		spin:      spinner.New(spinner.WithSpinner(spinner.MiniDot)),
 		vp:        viewport.New(),
 		help:      help.New(),
@@ -170,6 +170,7 @@ func Run(path string, opts app.Options, cfg Config) error {
 	m.themeIdx = idx
 	if cfg.ASCII {
 		m.glyphs = tab.ASCII
+		m.finder.ascii = true
 	}
 	m.applyTheme()
 	_, err = tea.NewProgram(m).Run()
@@ -208,17 +209,18 @@ func (m model) Init() tea.Cmd {
 	if m.screen == analyzingScreen {
 		return tea.Batch(requestBackground, m.spin.Tick, analyzeCmd(m.path, m.opts))
 	}
-	return tea.Batch(requestBackground, m.picker.Init())
+	return tea.Batch(requestBackground, m.finder.Init())
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
-		switch msg.String() {
-		case "q", "ctrl+c":
+		inFinder := m.screen == pickerScreen
+		switch s := msg.String(); {
+		case s == "ctrl+c", s == "q" && !inFinder:
 			m.closePlayer()
 			return m, tea.Quit
-		case "t":
+		case s == "ctrl+t", s == "t" && !inFinder:
 			m.cycleTheme()
 			return m, nil
 		}
@@ -244,7 +246,7 @@ const (
 	minTabRows  = 4
 	minTabCols  = 24
 	minPanelW   = 28
-	pickerFixed = 6
+	pickerFixed = 7
 )
 
 func (m *model) resizeViewer() {
@@ -286,7 +288,7 @@ func (m *model) resizeViewer() {
 	if m.err != nil {
 		pickerErr = 1
 	}
-	m.picker.setSize(m.w, m.h-pickerFixed-pickerErr)
+	m.finder.setSize(m.w, m.h-pickerFixed-pickerErr)
 	m.rebuild()
 }
 
@@ -401,13 +403,14 @@ func (m model) updatePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.spin.Tick, analyzeCmd(msg.path, m.opts))
 	}
 	var cmd tea.Cmd
-	m.picker, cmd = m.picker.Update(msg)
+	m.finder, cmd = m.finder.Update(msg)
 	return m, cmd
 }
 
 func (m model) updateAnalyzing(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case analysisDoneMsg:
+		pushRecent(msg.res.Path)
 		m.res = msg.res
 		m.screen = viewerScreen
 		m.notes.setResult(msg.res)
@@ -428,7 +431,7 @@ func (m model) updateAnalyzing(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.err = msg.err
 		m.screen = pickerScreen
 		m.resizeViewer()
-		return m, tea.Batch(m.picker.Init(), clearErrCmd())
+		return m, tea.Batch(m.finder.Init(), clearErrCmd())
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spin, cmd = m.spin.Update(msg)
@@ -508,7 +511,7 @@ func (m model) updateViewer(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.res = nil
 			m.wave = nil
 			m.path = ""
-			return m, m.picker.Init()
+			return m, m.finder.Init()
 		}
 		if m.notes.open {
 			switch {
@@ -764,21 +767,23 @@ func (m model) pickerView() string {
 	b.WriteString(m.brand())
 	b.WriteString(m.st.muted.Render("  turn a bass recording into tab"))
 	b.WriteString("\n\n")
-	b.WriteString(" " + m.picker.breadcrumb(m.st))
+	b.WriteString(" " + ansi.Truncate(m.finder.input.View(m.st), max(w-1, 1), ""))
+	b.WriteString("\n")
+	b.WriteString(" " + m.finder.breadcrumb(m.st))
 	b.WriteString("\n")
 	if m.err != nil {
 		b.WriteString(" " + m.st.danger.Render("✗ "+m.err.Error()))
 		b.WriteString("\n")
 	}
-	b.WriteString(m.rule(m.st.muted.Render(fmt.Sprintf("%d items", len(m.picker.entries))), w))
+	b.WriteString(m.rule(m.st.muted.Render(m.finder.status()), w))
 	b.WriteString("\n")
-	b.WriteString(m.picker.View(m.st))
+	b.WriteString(m.finder.View(m.st))
 	b.WriteString("\n")
 	b.WriteString(m.rule("", w))
 	b.WriteString("\n")
-	b.WriteString(m.hint([][2]string{
-		{"↑↓", "move"}, {"enter", "open"}, {"h", "up"}, {"~", "home"}, {"t", "theme"}, {"q", "quit"},
-	}))
+	b.WriteString(ansi.Truncate(m.hint([][2]string{
+		{"type", "find"}, {"↑↓", "move"}, {"enter", "open"}, {"⌫", "up"}, {"~", "home"}, {"esc", "clear"}, {"ctrl+t", "theme"}, {"ctrl+c", "quit"},
+	}), w, ""))
 	return b.String()
 }
 
