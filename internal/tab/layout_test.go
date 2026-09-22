@@ -48,3 +48,68 @@ func TestSlotCellMatchesRenderLayout(t *testing.T) {
 		}
 	}
 }
+
+func TestSlotAtInvertsSlotCell(t *testing.T) {
+	riff := riffNotes()
+	layoutNotes, layoutFrets := layoutNotesFrets()
+	fixtures := []struct {
+		name    string
+		notes   []music.Note
+		frets   []tab.Fretting
+		gridDiv int
+		perLine int
+		cellW   int
+	}{
+		{"riff", riff, tab.Assign(riff, beadg, 0), 4, 4, 2},
+		{"riff wide", riff, tab.Assign(riff, beadg, 0), 4, 2, 3},
+		{"fret 12", layoutNotes, layoutFrets, 4, 3, 3},
+		{"grid 8", riff, tab.Assign(riff, beadg, 0), 2, 1, 4},
+	}
+	for _, fx := range fixtures {
+		for _, chrome := range [][2]int{{0, 0}, {1, 0}, {1, 3}} {
+			l := tab.Build(fx.notes, fx.frets, beadg, fx.gridDiv, fx.perLine, fx.cellW).Layout()
+			l.Top, l.Bottom = chrome[0], chrome[1]
+			total := l.Measures * l.SlotsPerMeasure
+			for slot := 0; slot < total; slot++ {
+				block, col := l.SlotCell(slot)
+				for s := 0; s < l.Rows; s++ {
+					for dx := 0; dx < l.CellW; dx++ {
+						got, ok := l.SlotAt(l.StringRow(block, s), col+dx)
+						if !ok || got != slot {
+							t.Fatalf("%s top %d bottom %d: SlotAt(StringRow(%d, %d), %d) = %d %v, want slot %d", fx.name, l.Top, l.Bottom, block, s, col+dx, got, ok, slot)
+						}
+					}
+				}
+				if _, ok := l.SlotAt(l.StringRow(block, 0), l.NameW); ok {
+					t.Errorf("%s: the gutter column mapped to a slot", fx.name)
+				}
+				if l.Top > 0 {
+					if _, ok := l.SlotAt(block*l.Stride(), col); ok {
+						t.Errorf("%s: the ruler row mapped to a slot", fx.name)
+					}
+				}
+				for b := 0; b < l.Bottom; b++ {
+					if _, ok := l.SlotAt(block*l.Stride()+l.Top+l.Rows+b, col); ok {
+						t.Errorf("%s: rhythm row %d mapped to a slot", fx.name, b)
+					}
+				}
+				if _, ok := l.SlotAt(block*l.Stride()+l.Stride()-1, col); ok {
+					t.Errorf("%s: the blank separator mapped to a slot", fx.name)
+				}
+			}
+			for mi := 0; mi < l.MeasuresPerLine; mi++ {
+				bar := l.NameW + 1 + (mi+1)*(l.SlotsPerMeasure*l.CellW+1) - 1
+				if _, ok := l.SlotAt(l.StringRow(0, 0), bar); ok {
+					t.Errorf("%s: bar column %d mapped to a slot", fx.name, bar)
+				}
+			}
+			lastBlock, lastCol := l.SlotCell(total - 1)
+			if _, ok := l.SlotAt(l.StringRow(lastBlock+1, 0), lastCol); ok {
+				t.Errorf("%s: a row past the last system mapped to a slot", fx.name)
+			}
+			if _, ok := l.SlotAt(-1, lastCol); ok {
+				t.Errorf("%s: a negative line mapped to a slot", fx.name)
+			}
+		}
+	}
+}

@@ -389,6 +389,14 @@ func (m *model) resizePanel(delta int) {
 
 func (m model) updatePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.MouseClickMsg:
+		if msg.Button != tea.MouseLeft {
+			return m, nil
+		}
+		cmd := m.finder.click(msg.X, msg.Y-m.finderListTop())
+		return m, cmd
+	case tea.MouseWheelMsg:
+		return m, m.finder.wheel(wheelDelta(msg))
 	case clearErrMsg:
 		m.err = nil
 		m.resizeViewer()
@@ -442,6 +450,16 @@ func (m model) updateAnalyzing(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) updateViewer(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.MouseClickMsg:
+		if msg.Button == tea.MouseLeft {
+			m.click(msg.X, msg.Y)
+		}
+		return m, nil
+	case tea.MouseWheelMsg:
+		if _, inside := m.notesRowAt(msg.X, msg.Y); inside {
+			m.notes.scroll(wheelDelta(msg))
+			return m, nil
+		}
 	case tickMsg:
 		if msg.gen != m.tickGen {
 			return m, nil
@@ -739,6 +757,7 @@ func (m model) View() tea.View {
 	}
 	v := tea.NewView(s)
 	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
 	return v
 }
 
@@ -933,4 +952,78 @@ func (m model) helpView() string {
 		lines[i] = ansi.Truncate(line, max(m.w, 1), "")
 	}
 	return strings.Join(lines, "\n")
+}
+
+const (
+	tabTop        = 1
+	finderListTop = 5
+	wheelStep     = 3
+)
+
+func wheelDelta(msg tea.MouseWheelMsg) int {
+	if msg.Button == tea.MouseWheelUp {
+		return -wheelStep
+	}
+	return wheelStep
+}
+
+func (m model) finderListTop() int {
+	if m.err != nil {
+		return finderListTop + 1
+	}
+	return finderListTop
+}
+
+func (m model) waveRowY() int {
+	y := tabTop + m.vp.Height()
+	if m.notes.open && m.notes.side == panelBottom {
+		y += 1 + m.notes.height
+	}
+	return y
+}
+
+func (m model) notesRowAt(x, y int) (int, bool) {
+	if !m.notes.open {
+		return 0, false
+	}
+	var y0 int
+	switch m.notes.side {
+	case panelRight:
+		if x < m.vp.Width()+1 {
+			return 0, false
+		}
+		y0 = tabTop + 1
+	default:
+		y0 = tabTop + m.vp.Height() + 1
+	}
+	if y < y0 || y >= y0+m.notes.height {
+		return 0, false
+	}
+	return y - y0 + m.notes.offset, true
+}
+
+func (m *model) click(x, y int) {
+	if m.res == nil {
+		return
+	}
+	switch {
+	case y == m.waveRowY():
+		if d := m.res.DurationSec; d > 0 && m.w > 0 {
+			m.setPos(d * float64(x) / float64(m.w))
+			m.syncNoteSel()
+			m.ensureCursorVisible()
+		}
+	case y >= tabTop && y < tabTop+m.vp.Height() && x < m.vp.Width():
+		if len(m.res.Notes) == 0 {
+			return
+		}
+		if slot, ok := m.res.Layout.SlotAt(y-tabTop+m.vp.YOffset(), x+m.vp.XOffset()); ok {
+			m.setPos(slotTime(m.res, slot))
+			m.syncNoteSel()
+		}
+	default:
+		if row, inside := m.notesRowAt(x, y); inside && row < len(m.notes.rows) {
+			m.selectNote(row)
+		}
+	}
 }

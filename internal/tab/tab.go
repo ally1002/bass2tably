@@ -150,3 +150,28 @@ func RenderLayoutWidth(notes []music.Note, frets []Fretting, tuning []int, gridD
 	sh := Build(notes, frets, tuning, gridDiv, measuresPerLine, 2)
 	return sh.Text(ASCII), sh.Layout()
 }
+
+func (l Layout) SlotAt(line, col int) (int, bool) {
+	stride := l.Stride()
+	if line < 0 || stride < 1 {
+		return 0, false
+	}
+	block, r := line/stride, line%stride
+	if r < l.Top || r >= l.Top+l.Rows {
+		return 0, false
+	}
+	x := col - l.NameW - 1
+	mw := l.SlotsPerMeasure*l.CellW + 1
+	if x < 0 || mw < 1 || l.MeasuresPerLine < 1 {
+		return 0, false
+	}
+	mi, xin := x/mw, x%mw
+	if mi >= l.MeasuresPerLine || xin == mw-1 {
+		return 0, false
+	}
+	slot := (block*l.MeasuresPerLine+mi)*l.SlotsPerMeasure + xin/l.CellW
+	if slot >= l.Measures*l.SlotsPerMeasure {
+		return 0, false
+	}
+	return slot, true
+}

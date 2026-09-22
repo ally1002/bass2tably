@@ -619,21 +619,16 @@ func (f finder) listView(st styles) string {
 		}
 		return lipgloss.NewStyle().Height(f.height - f.stackedPreviewRows()).Render(strings.Join(lines, "\n"))
 	}
-	end := min(f.offset+f.listHeight(), len(es))
-	recentHeader := f.showRecent()
-	for i := f.offset; i < end; i++ {
-		e := es[i]
-		if recentHeader && i == 0 {
-			lines = append(lines, f.sectionRow(st, "recent", w))
-		}
-		if recentHeader && i == len(f.recent) {
-			lines = append(lines, f.sectionRow(st, filepath.Base(f.dir), w))
+	for _, ln := range f.visibleLines() {
+		if ln.idx < 0 {
+			lines = append(lines, f.sectionRow(st, ln.header, w))
+			continue
 		}
 		var pos []int
-		if f.filtering() && i < len(f.hits) {
-			pos = f.hits[i].pos
+		if f.filtering() && ln.idx < len(f.hits) {
+			pos = f.hits[ln.idx].pos
 		}
-		lines = append(lines, f.entryRow(st, e, pos, i == f.sel, w))
+		lines = append(lines, f.entryRow(st, es[ln.idx], pos, ln.idx == f.sel, w))
 	}
 	return lipgloss.NewStyle().Height(f.height - f.stackedPreviewRows()).Render(strings.Join(lines, "\n"))
 }
@@ -731,4 +726,47 @@ func (f finder) previewView(st styles, w int) string {
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+type listLine struct {
+	idx    int
+	header string
+}
+
+func (f finder) visibleLines() []listLine {
+	es := f.entries()
+	end := min(f.offset+f.listHeight(), len(es))
+	recentHeader := f.showRecent()
+	var out []listLine
+	for i := f.offset; i < end; i++ {
+		if recentHeader && i == 0 {
+			out = append(out, listLine{idx: -1, header: "recent"})
+		}
+		if recentHeader && i == len(f.recent) {
+			out = append(out, listLine{idx: -1, header: filepath.Base(f.dir)})
+		}
+		out = append(out, listLine{idx: i})
+	}
+	return out
+}
+
+func (f *finder) click(x, y int) tea.Cmd {
+	if x < 0 || x >= f.listWidth() || y < 0 {
+		return nil
+	}
+	lines := f.visibleLines()
+	if y >= len(lines) || lines[y].idx < 0 {
+		return nil
+	}
+	if lines[y].idx == f.sel {
+		return f.open()
+	}
+	f.sel = lines[y].idx
+	f.scrollIntoView()
+	return f.requestPreview()
+}
+
+func (f *finder) wheel(delta int) tea.Cmd {
+	f.move(delta)
+	return f.requestPreview()
 }
