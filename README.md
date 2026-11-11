@@ -4,6 +4,18 @@ Turns a bass recording into a bass tab in the terminal — printed once as ASCII
 
 Pure Go DSP (pitch from YIN's period candidates ranked by a two-way harmonic mismatch against the note's spectrum, onsets from a broadband energy envelope unioned with high-frequency spectral flux), no machine learning. Audio playback uses miniaudio through cgo; non-WAV input is decoded with the system `ffmpeg`.
 
+## Install
+
+Needs Go 1.26.2 or newer (from `go.mod`) and a C compiler, because playback goes through miniaudio via cgo (`github.com/gen2brain/malgo`). `ffmpeg` is only needed for input that is not WAV.
+
+```
+git clone https://github.com/ally1002/bass2tably.git
+cd bass2tably
+go install .
+```
+
+This puts a `bass2tably` binary in `$(go env GOPATH)/bin`.
+
 ## Usage
 
 ```
@@ -108,6 +120,16 @@ Every action is declared once in one table; the help footer (`?`), the command p
 | `esc` | Back to the finder |
 | `q` | Quit |
 
+## How it works
+
+1. Decoding. A `.wav` file is read directly and its channels are averaged to mono. Any other extension is converted by `ffmpeg` to a temporary 44.1 kHz mono 16-bit WAV first.
+2. Onsets. Two detectors run over the whole take. One is a broadband RMS envelope (512-sample windows, 256-sample hop) whose rises are picked when they exceed the mean plus 2.2 standard deviations and the envelope is above 5% of its maximum. The other is a high-frequency spectral flux: frame-to-frame increases in log magnitude, weighted by bin number. The broadband onsets are kept as they are, and a spectral onset is added only if it is at least 60 ms from every onset already found. A note ends at the next onset, or earlier if the envelope drops below 10% of the note's peak.
+3. Pitch. The first 10 ms of each note are skipped. YIN runs over frames three periods of the lowest allowed frequency long, and every local minimum of its difference function becomes a candidate, alongside candidates taken from the note's spectral partials. A two-way mismatch cost ranks them, with harmonics stretched for string stiffness, and YIN's estimate supplies the exact frequency when it agrees with the winner. Only pitches from a semitone below the lowest open string up to fret 24 on the highest one are considered.
+4. Tempo. Without `--bpm`, the tempo is the value between 55 and 200 BPM whose sixteenth-note grid best fits the gaps between onsets, with a preference for tempos near 110.
+5. Quantizing. Each note's start, measured from the first note, is rounded to the grid (`--grid`), and its length is rounded too and cut off where the next note starts.
+6. Fretting. A dynamic program picks a string and fret for every note so that the hand moves as little as possible along the neck, then across strings, pulled toward `--position`.
+7. Output. The same notes and frets feed the ASCII tab and note list, the TUI, the MIDI writer (960 ticks per quarter note) and the Guitar Pro 5 writer.
+
 ## Recording guidelines
 
 - Record against a metronome, and pass its tempo with `--bpm` when you know it — quantization depends on it, and the estimator only sees the onsets it detected.
@@ -138,6 +160,9 @@ Tests that need an audio device skip themselves when none is available.
 - Notes closer together than 60 ms merge into one. That window is also what stops a single pluck registering as two notes, so it cannot simply be shortened.
 - Low-frequency rolloff in the recording (phone mic, aggressive highpass) can drop onsets on the low B string.
 - Tempo is assumed constant for the whole take.
+- The first detected note is always placed on beat one of the first bar, so a riff that starts with a pickup is shifted.
+- The tempo estimator only searches 55 to 200 BPM. Outside that range, pass `--bpm`.
+- Only the four tunings listed under `--tuning` are available.
 - The Guitar Pro 5 export writes one bass track, one voice, 4/4 throughout, an integer tempo, and plain notes, rests, dots and ties on a binary grid: no tuplets, no pickup bar, no techniques, no dynamics beyond one fixed level, and no metadata beyond the title. A note that starts before the previous one has ended is dropped and counted in the `--gp` summary line. Songsterr's Upload accepts the files as written and keeps tuning, strings, frets, ties and dotted values (measured 2026-09-22 on `testdata/minimal.gp5` and `testdata/looped-phrase.gp5`).
 - Percussive playing with a wide dynamic range (slap and pop, ghost notes) loses the quiet attacks. The onset threshold is computed once for the whole take, so loud slaps raise it above everything quieter: on a slap recording we find 100 of the 142 attacks an independent detector reports, the misses being loud enough to pass the level gate but too gradual to pass the global flux threshold. The spectral detector does not help here — measured against the same recording at equal precision it finds fewer attacks than the broadband one, not more.
 - A note repeated at the same pitch on a string that is still ringing is now caught in most cases: 37 of the 38 attacks in `testdata/four-bar-repeats.wav`, against 27 before, all of which now resolve a pitch and reach the tab. Long uniform runs are where the misses concentrate — a bar of eleven G1 eighths comes out as eight.
