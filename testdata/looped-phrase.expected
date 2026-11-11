@@ -1,4 +1,4 @@
-# Ground truth for shh.wav. Derived from independent oracles, NOT from
+# Ground truth for looped-phrase.wav. Derived from independent oracles, NOT from
 # bass2tably's own output.
 #
 # The take is one 15-note phrase played four times, exactly 8.0 s apart.

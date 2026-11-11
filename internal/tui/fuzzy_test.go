@@ -6,16 +6,16 @@ import (
 )
 
 func TestFuzzyRanks(t *testing.T) {
-	names := []string{"s_h_h.wav", "ahh-shh.wav", "shh.wav", "shhh.wav"}
+	names := []string{"d_u_b.wav", "low-dub.wav", "dub.wav", "dubb.wav"}
 	type ranked struct {
 		name  string
 		score int
 	}
 	var got []ranked
 	for _, n := range names {
-		score, pos, ok := fuzzy("shh", n)
+		score, pos, ok := fuzzy("dub", n)
 		if !ok {
-			t.Fatalf("%q did not match shh", n)
+			t.Fatalf("%q did not match dub", n)
 		}
 		if len(pos) != 3 {
 			t.Errorf("%q: %d matched positions, want 3", n, len(pos))
@@ -23,27 +23,27 @@ func TestFuzzyRanks(t *testing.T) {
 		got = append(got, ranked{n, score})
 	}
 	sort.SliceStable(got, func(i, j int) bool { return got[i].score > got[j].score })
-	want := []string{"shh.wav", "ahh-shh.wav", "shhh.wav", "s_h_h.wav"}
+	want := []string{"dub.wav", "low-dub.wav", "dubb.wav", "d_u_b.wav"}
 	for i, w := range want {
 		if got[i].name != w {
 			t.Fatalf("rank %d = %q (%d), want %q; full order %v", i, got[i].name, got[i].score, w, got)
 		}
 	}
 	if got[1].score != got[2].score {
-		t.Errorf("ahh-shh.wav (%d) and shhh.wav (%d) should tie on score", got[1].score, got[2].score)
+		t.Errorf("low-dub.wav (%d) and dubb.wav (%d) should tie on score", got[1].score, got[2].score)
 	}
 
-	if _, _, ok := fuzzy("xyz", "shh.wav"); ok {
-		t.Error("xyz matched shh.wav")
+	if _, _, ok := fuzzy("xyz", "dub.wav"); ok {
+		t.Error("xyz matched dub.wav")
 	}
-	if _, _, ok := fuzzy("wavs", "shh.wav"); ok {
+	if _, _, ok := fuzzy("wavs", "dub.wav"); ok {
 		t.Error("a pattern longer than its subsequence matched")
 	}
 	score, pos, ok := fuzzy("", "anything.wav")
 	if !ok || score != 0 || pos != nil {
 		t.Errorf("empty pattern: score %d pos %v ok %v, want 0 nil true", score, pos, ok)
 	}
-	_, pos, ok = fuzzy("SHH", "Shh.WAV")
+	_, pos, ok = fuzzy("DUB", "Dub.WAV")
 	if !ok || len(pos) != 3 || pos[0] != 0 {
 		t.Errorf("case-insensitive match failed: pos %v ok %v", pos, ok)
 	}

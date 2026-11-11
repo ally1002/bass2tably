@@ -1,6 +1,6 @@
 package tui
 
-import "bass2tably/internal/audio"
+import "github.com/ally1002/bass2tably/internal/audio"
 
 type player interface {
 	Play() error

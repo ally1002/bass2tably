@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"strings"
 
-	"bass2tably/internal/music"
+	"github.com/ally1002/bass2tably/internal/music"
 )
 
 type CellKind uint8

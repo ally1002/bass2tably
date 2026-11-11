@@ -6,8 +6,8 @@ import (
 
 	"gitlab.com/gomidi/midi/v2/smf"
 
-	"bass2tably/internal/midiout"
-	"bass2tably/internal/music"
+	"github.com/ally1002/bass2tably/internal/midiout"
+	"github.com/ally1002/bass2tably/internal/music"
 )
 
 func TestWriteRoundtrip(t *testing.T) {

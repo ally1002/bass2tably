@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"bass2tably/internal/wavio"
+	"github.com/ally1002/bass2tably/internal/wavio"
 )
 
 func stretchedPartials(sr, n int, f0, b float64, amps []float64) []float64 {
@@ -83,7 +83,7 @@ func TestYinCandidatesKeepWhatTheThresholdScanSkips(t *testing.T) {
 }
 
 func TestYinCandidatesCarryTheOpenB(t *testing.T) {
-	clip, err := wavio.LoadAny("../../testdata/ahhintro.wav")
+	clip, err := wavio.LoadAny("../../testdata/four-bar-repeats.wav")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +112,7 @@ func TestYinCandidatesOnSilenceAndGaps(t *testing.T) {
 		t.Errorf("silence: got candidates %v, want none", cs)
 	}
 
-	clip, err := wavio.LoadAny("../../testdata/shh.wav")
+	clip, err := wavio.LoadAny("../../testdata/looped-phrase.wav")
 	if err != nil {
 		t.Fatal(err)
 	}

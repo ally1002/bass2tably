@@ -8,9 +8,9 @@ import (
 	"github.com/go-audio/audio"
 	"github.com/go-audio/wav"
 
-	"bass2tably/internal/app"
-	"bass2tably/internal/music"
-	"bass2tably/internal/tab"
+	"github.com/ally1002/bass2tably/internal/app"
+	"github.com/ally1002/bass2tably/internal/music"
+	"github.com/ally1002/bass2tably/internal/tab"
 )
 
 var fixtureTuning = []int{23, 28, 33, 38, 43}

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"bass2tably/internal/app"
-	"bass2tably/internal/gpout"
+	"github.com/ally1002/bass2tably/internal/app"
+	"github.com/ally1002/bass2tably/internal/gpout"
 )
 
 func hx(s string) []byte {

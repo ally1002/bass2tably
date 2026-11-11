@@ -7,7 +7,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"bass2tably/internal/app"
+	"github.com/ally1002/bass2tably/internal/app"
 )
 
 type panelSide int

@@ -4,8 +4,8 @@ import (
 	"math"
 	"os"
 
-	"bass2tably/internal/music"
-	"bass2tably/internal/tab"
+	"github.com/ally1002/bass2tably/internal/music"
+	"github.com/ally1002/bass2tably/internal/tab"
 )
 
 func Build(notes []music.Note, frets []tab.Fretting, tuning []int, gridDiv int, bpm float64, title string) (Score, Report) {

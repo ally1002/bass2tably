@@ -10,8 +10,8 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"bass2tably/internal/music"
-	"bass2tably/internal/tab"
+	"github.com/ally1002/bass2tably/internal/music"
+	"github.com/ally1002/bass2tably/internal/tab"
 )
 
 // legacyRenderLayoutWidth is the body of tab.RenderLayoutWidth as it was at

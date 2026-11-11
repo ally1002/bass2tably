@@ -3,7 +3,7 @@ package tui
 import (
 	"strings"
 
-	"bass2tably/internal/tab"
+	"github.com/ally1002/bass2tably/internal/tab"
 )
 
 type rhythmGlyphs struct{ stem, rest, open, join, close, line rune }

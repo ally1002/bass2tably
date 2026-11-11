@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"bass2tably/internal/wavio"
+	"github.com/ally1002/bass2tably/internal/wavio"
 )
 
 func TestReadInfoDescribesWithoutDecoding(t *testing.T) {

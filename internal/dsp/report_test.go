@@ -8,16 +8,16 @@ import (
 	"sort"
 	"testing"
 
-	"bass2tably/internal/music"
-	"bass2tably/internal/synth"
-	"bass2tably/internal/wavio"
+	"github.com/ally1002/bass2tably/internal/music"
+	"github.com/ally1002/bass2tably/internal/synth"
+	"github.com/ally1002/bass2tably/internal/wavio"
 )
 
 func TestCorpusReport(t *testing.T) {
 	if os.Getenv("BASS2TABLY_REPORT") == "" {
 		t.Skip("set BASS2TABLY_REPORT=1 to print the per-segment pitch table")
 	}
-	for _, f := range []string{"../../testdata/shh.wav", "../../testdata/ahhintro.wav", "../../testdata/ahhoutro.wav"} {
+	for _, f := range []string{"../../testdata/looped-phrase.wav", "../../testdata/four-bar-repeats.wav", "../../testdata/missing-fundamental.wav"} {
 		clip, err := wavio.LoadAny(f)
 		if err != nil {
 			t.Fatal(err)

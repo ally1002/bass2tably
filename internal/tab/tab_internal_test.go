@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"bass2tably/internal/music"
+	"github.com/ally1002/bass2tably/internal/music"
 )
 
 func assignGreedy(cands [][]Fretting, position float64) []int {
