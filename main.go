@@ -7,10 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"bass2tably/internal/app"
-	"bass2tably/internal/gpout"
-	"bass2tably/internal/midiout"
-	"bass2tably/internal/tui"
+	"github.com/ally1002/bass2tably/internal/app"
+	"github.com/ally1002/bass2tably/internal/gpout"
+	"github.com/ally1002/bass2tably/internal/midiout"
+	"github.com/ally1002/bass2tably/internal/tui"
 )
 
 func main() {

@@ -10,7 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"bass2tably/internal/app"
+	"github.com/ally1002/bass2tably/internal/app"
 )
 
 func exportModel(t *testing.T, res *app.Result, dir string) model {

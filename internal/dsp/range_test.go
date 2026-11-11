@@ -4,8 +4,8 @@ import (
 	"math"
 	"testing"
 
-	"bass2tably/internal/music"
-	"bass2tably/internal/wavio"
+	"github.com/ally1002/bass2tably/internal/music"
+	"github.com/ally1002/bass2tably/internal/wavio"
 )
 
 func TestRangeForTuning(t *testing.T) {

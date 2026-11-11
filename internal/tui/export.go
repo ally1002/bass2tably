@@ -9,8 +9,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"bass2tably/internal/gpout"
-	"bass2tably/internal/midiout"
+	"github.com/ally1002/bass2tably/internal/gpout"
+	"github.com/ally1002/bass2tably/internal/midiout"
 )
 
 const exportWidth = 80

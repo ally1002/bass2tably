@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"bass2tably/internal/synth"
+	"github.com/ally1002/bass2tably/internal/synth"
 )
 
 func TestPlaybackReachesEnd(t *testing.T) {

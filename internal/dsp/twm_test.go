@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"bass2tably/internal/wavio"
+	"github.com/ally1002/bass2tably/internal/wavio"
 )
 
 func stretchedList(f0, b float64, first int, amps []float64) []partial {

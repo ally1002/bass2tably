@@ -9,9 +9,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"bass2tably/internal/music"
-	"bass2tably/internal/tab"
-	"bass2tably/internal/wavio"
+	"github.com/ally1002/bass2tably/internal/music"
+	"github.com/ally1002/bass2tably/internal/tab"
+	"github.com/ally1002/bass2tably/internal/wavio"
 )
 
 const cacheVersion = 1

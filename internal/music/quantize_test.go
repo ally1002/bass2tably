@@ -6,11 +6,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"bass2tably/internal/dsp"
-	"bass2tably/internal/midiout"
-	"bass2tably/internal/music"
-	"bass2tably/internal/synth"
-	"bass2tably/internal/tab"
+	"github.com/ally1002/bass2tably/internal/dsp"
+	"github.com/ally1002/bass2tably/internal/midiout"
+	"github.com/ally1002/bass2tably/internal/music"
+	"github.com/ally1002/bass2tably/internal/synth"
+	"github.com/ally1002/bass2tably/internal/tab"
 )
 
 func TestQuantizeTestRiff(t *testing.T) {

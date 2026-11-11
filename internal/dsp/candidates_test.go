@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"bass2tably/internal/wavio"
+	"github.com/ally1002/bass2tably/internal/wavio"
 )
 
 func stretchedPartials(sr, n int, f0, b float64, amps []float64) []float64 {

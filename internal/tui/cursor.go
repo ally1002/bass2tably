@@ -3,7 +3,7 @@ package tui
 import (
 	"math"
 
-	"bass2tably/internal/app"
+	"github.com/ally1002/bass2tably/internal/app"
 )
 
 func cursorSlot(res *app.Result, posSec float64) int {

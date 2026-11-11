@@ -6,7 +6,7 @@ import (
 	"gitlab.com/gomidi/midi/v2"
 	"gitlab.com/gomidi/midi/v2/smf"
 
-	"bass2tably/internal/music"
+	"github.com/ally1002/bass2tably/internal/music"
 )
 
 const (

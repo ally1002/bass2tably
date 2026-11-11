@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"bass2tably/internal/gpout"
-	"bass2tably/internal/music"
-	"bass2tably/internal/tab"
+	"github.com/ally1002/bass2tably/internal/gpout"
+	"github.com/ally1002/bass2tably/internal/music"
+	"github.com/ally1002/bass2tably/internal/tab"
 )
 
 const nStrings = 5

@@ -6,7 +6,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 
-	"bass2tably/internal/tab"
+	"github.com/ally1002/bass2tably/internal/tab"
 )
 
 type paint struct{ pre, post string }

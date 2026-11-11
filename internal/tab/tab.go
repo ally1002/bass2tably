@@ -4,7 +4,7 @@ import (
 	"math"
 	"sort"
 
-	"bass2tably/internal/music"
+	"github.com/ally1002/bass2tably/internal/music"
 )
 
 const maxFret = 24

@@ -1,4 +1,4 @@
-module bass2tably
+module github.com/ally1002/bass2tably
 
 go 1.26.2
 

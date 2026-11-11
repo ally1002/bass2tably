@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"bass2tably/internal/music"
-	"bass2tably/internal/tab"
+	"github.com/ally1002/bass2tably/internal/music"
+	"github.com/ally1002/bass2tably/internal/tab"
 )
 
 type NoteRow struct {

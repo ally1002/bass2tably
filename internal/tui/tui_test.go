@@ -9,8 +9,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"bass2tably/internal/app"
-	"bass2tably/internal/tab"
+	"github.com/ally1002/bass2tably/internal/app"
+	"github.com/ally1002/bass2tably/internal/tab"
 )
 
 var testOpts = app.Options{Tuning: "BEADG", Grid: 16}

@@ -4,9 +4,9 @@ import (
 	"math"
 	"testing"
 
-	"bass2tably/internal/dsp"
-	"bass2tably/internal/music"
-	"bass2tably/internal/synth"
+	"github.com/ally1002/bass2tably/internal/dsp"
+	"github.com/ally1002/bass2tably/internal/music"
+	"github.com/ally1002/bass2tably/internal/synth"
 )
 
 func TestYinOnPureSines(t *testing.T) {

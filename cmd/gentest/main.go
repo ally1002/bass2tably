@@ -9,7 +9,7 @@ import (
 	"github.com/go-audio/audio"
 	"github.com/go-audio/wav"
 
-	"bass2tably/internal/synth"
+	"github.com/ally1002/bass2tably/internal/synth"
 )
 
 func main() {
