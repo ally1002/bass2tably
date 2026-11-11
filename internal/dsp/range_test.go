@@ -33,7 +33,7 @@ func TestRangeForTuning(t *testing.T) {
 }
 
 func TestOpenBIsRefusedOnAFourString(t *testing.T) {
-	clip, err := wavio.LoadAny("../../testdata/ahhoutro.wav")
+	clip, err := wavio.LoadAny("../../testdata/missing-fundamental.wav")
 	if err != nil {
 		t.Fatal(err)
 	}

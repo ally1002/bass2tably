@@ -15,7 +15,7 @@ import (
 
 func exportModel(t *testing.T, res *app.Result, dir string) model {
 	t.Helper()
-	res.Path = filepath.Join(dir, "shh.wav")
+	res.Path = filepath.Join(dir, "looped-phrase.wav")
 	res.Samples = nil
 	m := newModel(res.Path, testOpts)
 	m, _ = advance(t, m, tea.WindowSizeMsg{Width: 120, Height: 30})
@@ -44,7 +44,7 @@ func runExport(t *testing.T, m model) (model, flashMsg) {
 }
 
 func TestExportDialogWritesBothNextToInput(t *testing.T) {
-	res, err := app.Analyze(filepath.Join("..", "..", "testdata", "shh.wav"), app.Options{Tuning: "BEADG", Grid: 16})
+	res, err := app.Analyze(filepath.Join("..", "..", "testdata", "looped-phrase.wav"), app.Options{Tuning: "BEADG", Grid: 16})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,11 +54,11 @@ func TestExportDialogWritesBothNextToInput(t *testing.T) {
 	if !m.exp.open || m.exp.gp5 || m.exp.mid || m.exp.sel != 0 {
 		t.Fatalf("dialog after e: %+v, want nothing ticked and the first row highlighted", m.exp)
 	}
-	if want := filepath.Join(dir, "shh"); m.exp.path.Value() != want {
+	if want := filepath.Join(dir, "looped-phrase"); m.exp.path.Value() != want {
 		t.Fatalf("default path %q, want %q", m.exp.path.Value(), want)
 	}
 	view := ansi.Strip(m.viewerView())
-	for _, want := range []string{"Export", "[ ] Guitar Pro 5", "[ ] MIDI", "shh.gp5", "shh.mid", "to ›"} {
+	for _, want := range []string{"Export", "[ ] Guitar Pro 5", "[ ] MIDI", "looped-phrase.gp5", "looped-phrase.mid", "to ›"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("dialog lacks %q:\n%s", want, view)
 		}
@@ -81,22 +81,22 @@ func TestExportDialogWritesBothNextToInput(t *testing.T) {
 		t.Fatalf("export failed: %s", msg.text)
 	}
 	band := ansi.Strip(m.statusView())
-	if !strings.Contains(band, "wrote shh.gp5") || !strings.Contains(band, "shh.mid") {
+	if !strings.Contains(band, "wrote looped-phrase.gp5") || !strings.Contains(band, "looped-phrase.mid") {
 		t.Fatalf("band %q lacks the export report", band)
 	}
-	got, err := os.ReadFile(filepath.Join(dir, "shh.gp5"))
+	got, err := os.ReadFile(filepath.Join(dir, "looped-phrase.gp5"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	want, err := os.ReadFile(filepath.Join("..", "..", "testdata", "shh.gp5"))
+	want, err := os.ReadFile(filepath.Join("..", "..", "testdata", "looped-phrase.gp5"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(got, want) {
-		t.Fatalf("shh.gp5 from the viewer (%d bytes) differs from testdata/shh.gp5 (%d bytes)", len(got), len(want))
+		t.Fatalf("looped-phrase.gp5 from the viewer (%d bytes) differs from testdata/looped-phrase.gp5 (%d bytes)", len(got), len(want))
 	}
-	if fi, err := os.Stat(filepath.Join(dir, "shh.mid")); err != nil || fi.Size() == 0 {
-		t.Fatalf("shh.mid missing or empty: %v", err)
+	if fi, err := os.Stat(filepath.Join(dir, "looped-phrase.mid")); err != nil || fi.Size() == 0 {
+		t.Fatalf("looped-phrase.mid missing or empty: %v", err)
 	}
 	m, _ = advance(t, m, clearFlashMsg{})
 	if strings.Contains(ansi.Strip(m.statusView()), "wrote") {
@@ -117,7 +117,7 @@ func TestExportDialogChoosesFormatAndPath(t *testing.T) {
 	if m.exp.sel != 2 {
 		t.Fatalf("sel = %d after tab, want 2 (path)", m.exp.sel)
 	}
-	for range "shh" {
+	for range "looped-phrase" {
 		m, _ = advance(t, m, tea.KeyPressMsg{Code: tea.KeyBackspace})
 	}
 	for _, r := range "two takes" {
@@ -136,7 +136,7 @@ func TestExportDialogChoosesFormatAndPath(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "two takes.mid")); err == nil {
 		t.Fatal("a .mid was written although unticked")
 	}
-	if _, err := os.Stat(filepath.Join(dir, "shh.gp5")); err == nil {
+	if _, err := os.Stat(filepath.Join(dir, "looped-phrase.gp5")); err == nil {
 		t.Fatal("the default path was written as well")
 	}
 }

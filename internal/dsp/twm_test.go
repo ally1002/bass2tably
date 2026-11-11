@@ -54,7 +54,7 @@ func TestTwmCostPrefersSupportOverLoudness(t *testing.T) {
 }
 
 func TestTwmStretchWidensTheOpenBMargin(t *testing.T) {
-	clip, err := wavio.LoadAny("../../testdata/ahhintro.wav")
+	clip, err := wavio.LoadAny("../../testdata/four-bar-repeats.wav")
 	if err != nil {
 		t.Fatal(err)
 	}
